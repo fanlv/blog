@@ -2,11 +2,11 @@
 title: linux_mem
 tags: [hexo, cutie, tutorial]
 categories: [notes]
+updated: 2021-01-13 17:34:46
 # toc_level: 3
 # version: 3
-date: 2020-02-12 00:00:00 Z
-# updateDate: 2020-04-02 15:13:00
-# top: 3
+date: 2020-02-12 00:00:00
+top: 3
 # sticky: 100
 ---
 
