@@ -1,8 +1,10 @@
 -
-    function getPostCoverImg(post) {
-        const $coverImgElRegx = /<img.*?alt="\$cover".*?>/
-        const firstImgElRegx = /<img[^>]+src="?([^"\s]+)".*?>/
-        const coverImgElement = post.content.match(firstImgElRegx)
+    function getPostCoverImg(post) {            
+        //- const $coverImgElRegx = /<img.*?alt="\$cover".*?>/
+        
+        const coverImgElRegx1 = /<img[^>]+alt="cover"[^>]+src="?([^"\s]+)".*?>/
+        //- const firstImgElRegx = /<img[^>]+src="?([^"\s]+)".*?>/
+        const coverImgElement = post.content.match(coverImgElRegx1)
 
         if (!coverImgElement) return false
 

@@ -4,8 +4,9 @@ tags: [Linux , Backend , Memory]
 categories: [Linux]
 updated: 2021.07.25 21:16:01
 date: 2021.07.25 21:16:01
+cover: 1
 ---
-<!--more-->
+
 <br/>
 
 ## x86-32位虚拟地址空间
@@ -15,8 +16,8 @@ date: 2021.07.25 21:16:01
 <br/>
 
 `Linux`将虚拟地址空间划分为：`0~3G`为用户空间，`3~4G`为内核空间
-
-![Linux-Memory-X86-32](https://upload-images.jianshu.io/upload_images/12321605-b62889a2b3c2eb38.jpg?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+<img alt="cover" src="/./images/conver1.jpg">
+<!-- ![Linux-Memory-X86-32](https://upload-images.jianshu.io/upload_images/12321605-b62889a2b3c2eb38.jpg?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240) -->
 
 
 [点我查看原图](https://raw.githubusercontent.com/fanlv/blog/9f9a531bcf4876759ef216060175dba9702415f2/backup/Content/Foundation/images/Linux%20-%20Memory%20-%20X86-32.jpg)
