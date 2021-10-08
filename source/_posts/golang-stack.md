@@ -506,6 +506,7 @@ updated: 2021.08.01 01:50:20
 	
 每一个`Goroutine`的`g->stackguard`0都被设置为指向`stack.lo `+ `StackGuard`的位置。所以每一个函数在真正执行前都会将`SP`和`stackguard0`进行比较。
 
+<br/>
 
 #### 栈的初始化
 	
@@ -1151,6 +1152,7 @@ updated: 2021.08.01 01:50:20
 	demo3 after stack copy xDemo3 :  0  xDemo3 pointer: 0xc000117f70
 
 其实执行`go run`的时候，它就是想编译在运行，执行`go build`的时候没有“`禁止内联`”，所以`demo3`函数就发生了内联，所以变量也不会逃逸到堆上了。我们可以`go build -gcflags "-m"  stack.go`看下，输出日志如下。`can inline demo3 `，这个时候`demo3`已经内联了。
+
 	➜  GoTest git:(master) ✗ go build -gcflags "-m"  stack.go
 	#command-line-arguments
 	./stack.go:37:6: can inline demo3
