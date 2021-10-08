@@ -14,7 +14,6 @@ html(lang=config.language class= `appearance-${ appearance }`)
     title= pageTitle
     meta(name="description" content= config.description || theme.user && theme.user.description)
     meta(name="viewport" content="width=device-width, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, initial-scale=1")
-    meta(name="referrer" content="no-referrer")
 
     <!-- Google Analytics -->
     if(theme.ga_track_id)
@@ -34,11 +33,12 @@ html(lang=config.language class= `appearance-${ appearance }`)
         var _hmt = _hmt || [];
         (function() {
         var hm = document.createElement("script");
-        hm.src = "//hm.baidu.com/hm.js?" + '#{theme.ba_track_id}';
+        hm.src = "https://hm.baidu.com/hm.js?" + '#{theme.ba_track_id}';
         var s = document.getElementsByTagName("script")[0];
         s.parentNode.insertBefore(hm, s);
         })();
     <!-- End Baidu Analytics -->
+    meta(name="referrer" content="no-referrer")
 
     link(rel="icon" href= url_for(theme.favicon))
     link(rel="stylesheet" href= url_for('/style/common/bulma.css'))
