@@ -1,9 +1,12 @@
 ---
 title: Golang Memory Model
+tags:
+  - Backend
+  - Golang
+categories:
+  - Golang
 date: 2020.06.09 01:32:00
-updated: 2022.06.09 01:32:00
-tags: [Backend , Golang]
-categories: [Golang]
+updated: 2021.11.09 11:50:20
 ---
 
 

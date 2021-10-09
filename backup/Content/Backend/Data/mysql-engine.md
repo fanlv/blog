@@ -1,6 +1,7 @@
 # MyISAM和InnoDB区别和应用场景
 
 ### 什么是MyISAM 和InnoDB
+
 > MyISAM是MySQL的默认数据库引擎（5.5版之前），由早期的ISAM所改良。虽然性能极佳，但却有一个缺点：不支持事务处理（transaction）。
 > 
 > InnoDB，是MySQL的数据库引擎之一，为MySQL AB发行binary的标准之一。InnoDB由Innobase Oy公司所开发，2006年五月时由甲骨文公司并购。与传统的ISAM与MyISAM相比，InnoDB的最大特色就是支持了ACID兼容的事务（Transaction）功能，类似于PostgreSQL。
