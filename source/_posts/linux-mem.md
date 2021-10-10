@@ -1,7 +1,11 @@
 ---
 title: Linux内核虚拟地址空间
-tags: [Linux , Backend , Memory]
-categories: [Linux]
+tags:
+  - Linux
+  - System
+  - Memory
+categories:
+  - System
 updated: 2021.07.25 21:16:01
 date: 2021.07.25 21:16:01
 cover: 1

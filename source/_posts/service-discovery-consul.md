@@ -5,7 +5,6 @@ tags:
   - Middleware
   - Consul
 categories:
-  - Backend
   - Middleware
 date: 2018.10.12 15:18:18
 updated: 2018.10.12 15:18:18

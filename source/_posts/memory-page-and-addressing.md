@@ -2,9 +2,10 @@
 title: 内存管理、寻址方式那些事
 tags:
   - Linux
+  - System
   - Memory
 categories:
-  - Linux
+  - System
 date: 2018.11.08 14:05:56
 updated: 2018.11.08 14:05:56
 ---

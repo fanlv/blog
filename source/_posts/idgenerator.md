@@ -3,7 +3,7 @@ title: 分布式id几种生成方案
 tags:
   - Backend
 categories:
-  - Backend
+  - Middleware
 date: 2018.09.30 16:08:10
 updated: 2018.09.30 16:08:10
 ---
