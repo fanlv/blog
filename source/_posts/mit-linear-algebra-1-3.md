@@ -1,5 +1,5 @@
 ---
-title: 《MIT - 线性代数》笔记
+title: MIT - 线性代数
 tags:
   - Maths
 categories:

@@ -1,5 +1,5 @@
 ---
-title: 《操作系统45讲》笔记
+title: 《操作系统45讲》
 tags:
   - Linux
   - System
@@ -7,7 +7,7 @@ tags:
 categories:
   - System
 date: 2021-08-10 10:00:00
-updated: 2021-08-10 10:00:00
+updated: 1021-08-10 10:00:00
 ---
 
 

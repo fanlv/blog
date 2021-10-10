@@ -1,5 +1,5 @@
 ---
-title: 《ETCD实战》笔记
+title: 《ETCD实战》
 tags:
   - Backend
   - Middleware
@@ -8,7 +8,7 @@ tags:
 categories:
   - Middleware
 date: 2021-04-11 10:00:35
-updated: 2021-04-11 10:00:35
+updated: 1021-04-11 10:00:35
 ---
 
 ## 背景

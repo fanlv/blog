@@ -1,5 +1,5 @@
 ---
-title: 《MySQL实战45讲》笔记
+title: 《MySQL实战45讲》
 tags:
   - Backend
   - Middleware
@@ -8,7 +8,7 @@ tags:
 categories:
   - MySQL
 date: 2019.08.01 19:56:08
-updated: 2019.08.01 19:56:08
+updated: 1019.08.01 19:56:08
 ---
 
 ## binlog && redo log

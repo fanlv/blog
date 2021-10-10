@@ -1,5 +1,5 @@
 ---
-title: 《深入浅出计算机组成原理》笔记
+title: 《深入浅出计算机组成原理》
 tags:
   - Backend
   - System
@@ -8,7 +8,7 @@ tags:
 categories:
   - System
 date: 2020-07-16 10:00:00
-updated: 2020-07-16 10:00:00
+updated: 1020-07-16 10:00:00
 ---
 
 ## 基础篇

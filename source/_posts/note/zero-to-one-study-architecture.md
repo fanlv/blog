@@ -1,12 +1,12 @@
 ---
-title: 《从0开始学架构》笔记
+title: 《从0开始学架构》
 tags:
   - Architecture
   - Note
 categories:
   - Architecture
 date: 2020-09-20 15:31:00
-updated: 2020-09-20 15:31:00
+updated: 1020-09-20 15:31:00
 ---
 
 

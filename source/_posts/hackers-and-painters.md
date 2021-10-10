@@ -1,5 +1,5 @@
 ---
-title: 《黑客与画家》笔记
+title: 《黑客与画家》
 date: 2021.09.21 13:23:17
 updated: 2021.09.21 13:23:17
 tags: [Literature , Note]

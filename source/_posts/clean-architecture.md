@@ -1,5 +1,5 @@
 ---
-title: 《Clean Architecture》笔记
+title: Clean Architecture
 tags:
   - Architecture
   - Note

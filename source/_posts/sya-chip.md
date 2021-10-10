@@ -1,5 +1,5 @@
 ---
-title: 《说透芯片》笔记
+title: 《说透芯片》
 tags:
   - Chip
   - System

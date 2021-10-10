@@ -1,5 +1,5 @@
 ---
-title: DDD-领域驱动设计基础概念
+title: DDD-领域驱动设计
 tags:
   - Architecture
   - Note

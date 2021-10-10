@@ -1,12 +1,12 @@
 ---
-title: 《30天自制操作系统》笔记
+title: 《30天自制操作系统》
 tags:
   - System
   - Note
 categories:
   - System
 date: 2021-03-10 10:35:59
-updated: 2021-03-10 10:35:59
+updated: 1021-03-10 10:35:59
 ---
 
 

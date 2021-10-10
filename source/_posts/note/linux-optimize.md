@@ -1,5 +1,5 @@
 ---
-title: 《Linux性能优化实战》笔记
+title: 《Linux性能优化实战》
 tags:
   - Linux
   - System
@@ -7,7 +7,7 @@ tags:
 categories:
   - System
 date: 2020-09-13 10:00:00
-updated: 2020-09-13 10:00:00
+updated: 1020-09-13 10:00:00
 ---
 
 

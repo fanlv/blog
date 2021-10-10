@@ -1,12 +1,12 @@
 ---
-title: 《设计模式》笔记
+title: 《设计模式》
 tags:
   - Architecture
   - Note
 categories:
   - Architecture
 date: 2021-03-25 16:05:51
-updated: 2021-03-25 16:05:51
+updated: 1021-03-25 16:05:51
 ---
 
 ## 前言

@@ -1,12 +1,12 @@
 ---
-title: 《数据密集型应用系统设计》笔记
+title: 《数据密集型应用系统设计》
 tags:
   - Architecture
   - Note
 categories:
   - Architecture
 date: 2020-12-07 15:00:00
-updated: 2020-12-07 15:00:00
+updated: 1020-12-07 15:00:00
 ---
 
 

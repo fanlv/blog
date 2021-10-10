@@ -1,5 +1,5 @@
 ---
-title: 《Clean Code》笔记
+title: Clean Code
 tags:
   - Architecture
   - Note

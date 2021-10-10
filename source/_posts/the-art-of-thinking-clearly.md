@@ -1,5 +1,5 @@
 ---
-title: 《清醒思考的艺术》笔记
+title: 《清醒思考的艺术》
 tags:
   - Literature
   - Note

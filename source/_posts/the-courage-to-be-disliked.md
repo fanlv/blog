@@ -1,5 +1,5 @@
 ---
-title: 《被讨厌的勇气》笔记
+title: 《被讨厌的勇气》
 tags:
   - Literature
   - Note
