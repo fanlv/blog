@@ -102,35 +102,30 @@ updated: 2023.11.09 11:50:20
 
 我们先看一下这个线程可见性的测试`DEMO`
 	
-	func main() {
-		running := true
-		go func() {
-			println("thread1 start")
-			count := 1
-			for running {
-				count++
-			}
-			println("thread1 end : count = ", count) //这个循环永远也不会结束,为什么？
-		}()
-		go func() {
-			println("start thread2")
-			for {
-				running = false
-			}
-		}()
-		time.Sleep(time.Hour)
-		return
-	}
+    public class Main {
+        void m() {
+            System.out.println("m num start\n");
+            long count = 1;
+            while (running) {
+                count++;
+            }
+            System.out.println("m num end\n");
+        }
 
-我分别用
+        /* volatile */ boolean running = true;
 
-[Java Demo](./Main.java) 
+        public static void main(String[] args) {
+            Main test = new Main();
+            new Thread(test::m, "t1").start();
 
-[Objective-C Demo](./AppDelegate.m#L51) 
-
-[C Demo](./main.c)
-
- 测试了下，跟`Golang`的执行的效果一致，`thread1` 永远也不会停止。（`C`和`Objective-C`用`Xcode`跑的时候需要用`Release`模式，因为`Debug`和`Release`的`-O`优化级别不一样，[-O优化详见](https://blog.csdn.net/kobemin/article/details/83180747)）。
+            try {
+                TimeUnit.SECONDS.sleep(1);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            test.running = false;
+        }
+    }
 
 为什么在一个线程修改了共享变量，另外一个线程感知不到呢？这里我们需要了解下CPU的Cache结构。
 
