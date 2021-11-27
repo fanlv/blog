@@ -8,13 +8,12 @@ categories:
 date: 2021-11-28 01:00:00
 updated: 2021-11-28 01:01:00
 ---
-<br/>
 
 ## 一、背景
 
-最近负责一个数据传输的项目，其中一个需求就是能把一个`DB`里面的数据拉出来 ，然后回放到另外一个同构的`DB`。两个`DB`的服务不在一个时区（其实这不是重点），**可能配置不同**。之前有过类似的项目，当时是基建的同事负责做数据同步，同步过去以后`DateTime`、`Timespan`字段的时区信息都丢了。老板让我调研下，不要踩之前的坑。
+最近负责一个数据传输的项目，其中一个需求就是能把一个`DB`里面的数据拉出来 ，然后回放到另外一个同构的`DB`。两个`DB`的服务不在一个时区（其实这不是重点），可能配置不同。之前有过类似的项目，当时是基建的同事负责做数据同步，同步过去以后`DateTime`、`Timespan`字段的时区信息都丢了。老板让我调研下，不要踩之前的坑。
 
-最早的时候看了下同事写的当时`MySQL`时区信息丢失的问题总结文档，文档里面当时把`DateTime`和`Timespan`两个时区问题混为一起了，导致我当时没看太明白，然后的武断的认为，之所以时区丢失了，是因为基础组件同步`DateTime`和`TimeSpan`的时候同步的是字符串，比如`2021-11-27 10:49:35.857969` 这种信息，我们传输的时候，只要转`timestamp`然后存过去就行了（其实并没有那么简单，后面会说）。
+最早的时候看了下同事写的当时`MySQL`时区信息丢失的问题总结文档，文档里面当时把`DateTime`和`Timespan`两个时区问题混为一起了，也没分析本质原因，导致我当时没看太明白，然后的武断的认为，之所以时区丢失了，是因为基础组件同步`DateTime`和`TimeSpan`的时候同步的是字符串，比如`2021-11-27 10:49:35.857969` 这种信息，我们传输的时候，只要转`timestamp`然后存过去就行了（其实并没有那么简单，后面会说）。
 
 先说结论，如果你能保证`所有项目`连接`DB`的`DSN`配置的`loc`和`time_zone`（`time_zone`没有配置的话会用`MySQL`服务端的默认配置） 都是一样的，那不用看下去了。不管你数据在不同`DB`之间怎么传输，服务读取的`DB`的时区都是正确的。
 
@@ -72,12 +71,13 @@ DataTime 表示范围 `'1000-01-01 00:00:00' to '9999-12-31 23:59:59'`。`5.6.4`
 
 ### 2.3 SQL 数据传输时候，DataTime和Timespan都是字符串传输
 
-	DROP TABLE IF EXISTS `dt_test`;
-	CREATE TABLE dt_test (
-		`id` bigint(20) unsigned NOT ](./ULL AUTO_INCREMENT COMMENT 'pk',
-		`program_insert_time` varchar(100) COMMENT '代码里面获取的时间，系统时间',
+	DROP TABLE IF EXISTS `ts_test`;
+	CREATE TABLE ts_test (
+		`id` bigint(20) unsigned NOT NULL AUTO_INCREMENT COMMENT 'pk',
+		`program_insert_time` varchar(100) COMMENT '代码里面获取的时间字符串，insert 语句用的',
+		`time_zone` INT COMMENT '插入的时候当前 session 的 time_zone 设置的是什么',
 		`loc` varchar(20) COMMENT '插入这个语句时候，dsn 的 loc',
-		`dt` DATETIME(6),
+		`ts` TIMESTAMP(6),
 		 PRIMARY KEY (id)
 	);
 	
@@ -104,8 +104,7 @@ wireshark 抓包可知SQL传输的时候，DataTime和Timespan都是直接传输
 ### 3.1 Datetime 问题分析
 
 上面我们说过`SQL`请求和响应的`Body`里面`Datetime`和`Timespan`字段都是用**时间字符串**，我们用`GORM`执行`SQL`的时候，
-我们传的对`Golang`的`time.Time`，这个`time`类型的时间是怎么最终转换成不带时区的时间字符串呢？翻了下`Go-MySQL-Driver`[代码](https://github.com/go-sql-driver/mysql/blob/master/packets.go#L1119)，
-看到有下面这段逻辑
+我们传的对`Golang`的`time.Time`，这个`time`类型的时间是怎么最终转换成不带时区的时间字符串呢？翻了下`Go-MySQL-Driver`[代码](https://github.com/go-sql-driver/mysql/blob/master/packets.go#L1119)，看到有下面这段逻辑。
 
     case time.Time:
         paramTypes[i+i] = byte(fieldTypeString)
@@ -177,7 +176,7 @@ wireshark 抓包可知SQL传输的时候，DataTime和Timespan都是直接传输
 
 ### 3.2 Datetime 总结
 
-`Datetime`在`MySQL`服务端只是一个字符串，时区信息都是由连接串的`loc`字符串控制的。如果要想时区保证一直，写入和读取的`loc`必须保证一致。
+`Datetime`在`MySQL`服务端保存的只是一个字符串，时区信息都是由连接串的`loc`字符串控制的。如果要想时区保证一致，写入和读取的`loc`必须保证一致。
 
 需要注意几点：
 
@@ -191,7 +190,7 @@ wireshark 抓包可知SQL传输的时候，DataTime和Timespan都是直接传输
 
 ### 3.3 Timespan
 
-`Timespan` 大致流程跟 `Datetime`差不多，只是时间字符串到了服务端，服务端会用`time_zone`加字符串得到`UnixTime`然后保存（个人猜想，并没有去找`MySQL`源码验证）。[是通过简单的代码测试](./time_span.go)和官方文档来验证自己的想法。
+`Timespan`在`go-sql-driver`里面的处理流程跟`Datetime`一样，区别是是时间字符串到了服务端，服务端会用`time_zone`加字符串得到`UnixTime`然后保存（这部分只是个人猜想，并没有去找`MySQL`源码验证，[只是通过简单的代码测试](./time_span.go)和官方文档来验证自己的想法），从结果上来看，读入和写入的`session`的`time_zone`必须保持一致读的数据才是对的。
 
 [time_zone 相关官方文档](https://dev.mysql.com/doc/refman/8.0/en/time-zone-support.html)
 
