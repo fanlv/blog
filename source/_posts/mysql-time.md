@@ -41,7 +41,7 @@ DataTime 表示范围 `'1000-01-01 00:00:00' to '9999-12-31 23:59:59'`。`5.6.4`
 需要注意的是：不论是`5.6.4`之前，还是`5.6.4`之后`DateTime`字段里面都没有带时区信息，更多可以看 [MySQL官网文档](https://dev.mysql.com/doc/internals/en/date-and-time-data-type-representation.html)。
 
 
-![Datetime type](./mysql-time/datetime_type.jpg)
+![Datetime type](./datetime_type.jpg)
 
 
 ### MySQL Timespan 带时区信息
@@ -71,7 +71,7 @@ DataTime 表示范围 `'1000-01-01 00:00:00' to '9999-12-31 23:59:59'`。`5.6.4`
 
 	DROP TABLE IF EXISTS `dt_test`;
 	CREATE TABLE dt_test (
-		`id` bigint(20) unsigned NOT NULL AUTO_INCREMENT COMMENT 'pk',
+		`id` bigint(20) unsigned NOT ](./ULL AUTO_INCREMENT COMMENT 'pk',
 		`program_insert_time` varchar(100) COMMENT '代码里面获取的时间，系统时间',
 		`loc` varchar(20) COMMENT '插入这个语句时候，dsn 的 loc',
 		`dt` DATETIME(6),
@@ -85,13 +85,13 @@ DataTime 表示范围 `'1000-01-01 00:00:00' to '9999-12-31 23:59:59'`。`5.6.4`
 
 wireshark 抓包可知SQL传输的时候，DataTime和Timespan都是直接传输不带时区的字符串，如`2021-11-27 14:08:07.3751`这种。
 
-![](./mysql-time/insert_1.jpg)
+![](./insert_1.jpg)
 
-![](./mysql-time/insert_2.jpg)
+![](./insert_2.jpg)
 
-![](./mysql-time/select_req.jpg)
+![](./select_req.jpg)
 
-![](./mysql-time/select_resp.jpg)
+![](./select_resp.jpg)
 
 
 
@@ -179,12 +179,12 @@ wireshark 抓包可知SQL传输的时候，DataTime和Timespan都是直接传输
 2. 如果时间传的是字符串，或者我们自己写的`RawSQL`，我们需要把`time format`为`loc`时区对应的时间串，不然即使`loc`相同读取出来的值也是不对的。
 
 
-![Datetime type](./mysql-time/datetime.jpg)
+![Datetime type](./datetime.jpg)
 
 
 ### Timespan
 
-`Timespan` 大致流程跟 `Datetime`差不多，只是时间字符串到了服务端，服务端会用`time_zone`加字符串得到`UnixTime`然后保存（个人猜想，并没有去找`MySQL`源码验证）。[是通过简单的代码测试](./mysql-time/time_span.go)和官方文档来验证自己的想法。
+`Timespan` 大致流程跟 `Datetime`差不多，只是时间字符串到了服务端，服务端会用`time_zone`加字符串得到`UnixTime`然后保存（个人猜想，并没有去找`MySQL`源码验证）。[是通过简单的代码测试](./time_span.go)和官方文档来验证自己的想法。
 
 [time_zone 相关官方文档](https://dev.mysql.com/doc/refman/8.0/en/time-zone-support.html)
 
@@ -196,7 +196,7 @@ wireshark 抓包可知SQL传输的时候，DataTime和Timespan都是直接传输
 
 如果真的要存时间戳，建议用`binint`存，这样不管数据怎么传输，不管`loc`、`time_zone` 怎么配置。
 
-![Datetime type](./mysql-time/timespan.jpg)
+![Datetime type](./timespan.jpg)
 
 
 ## 数据传输的时候如何保证数据正确
@@ -207,7 +207,7 @@ wireshark 抓包可知SQL传输的时候，DataTime和Timespan都是直接传输
 2. `DTS`数据传输的时候，因为`time`字段都是字符串，需要把时间字符串+`loc`转成时间戳，然后发送到对端。
 
 
-![Datetime type](./mysql-time/dts.png)
+![Datetime type](./dts.png)
 
 
 
