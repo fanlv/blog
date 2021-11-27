@@ -8,9 +8,9 @@ categories:
 date: 2021-11-28 01:00:00
 updated: 2021-11-28 01:01:00
 ---
+<br/>
 
-
-## 背景
+## 一、背景
 
 最近负责一个数据传输的项目，其中一个需求就是能把一个`DB`里面的数据拉出来 ，然后回放到另外一个同构的`DB`。两个`DB`的服务不在一个时区（其实这不是重点），**可能配置不同**。之前有过类似的项目，当时是基建的同事负责做数据同步，同步过去以后`DateTime`、`Timespan`字段的时区信息都丢了。老板让我调研下，不要踩之前的坑。
 
@@ -18,9 +18,9 @@ updated: 2021-11-28 01:01:00
 
 先说结论，如果你能保证`所有项目`连接`DB`的`DSN`配置的`loc`和`time_zone`（`time_zone`没有配置的话会用`MySQL`服务端的默认配置） 都是一样的，那不用看下去了。不管你数据在不同`DB`之间怎么传输，服务读取的`DB`的时区都是正确的。
 
-## 基础知识
+## 二、基础知识
 
-### Unix时间戳带时区信息
+### 2.1 Unix时间戳带时区信息
 
 [UNIX时间](https://zh.wikipedia.org/wiki/UNIX%E6%97%B6%E9%97%B4)，是UNIX或类UNIX系统使用的时间表示方式：从`UTC 1970年1月1日0时0分0秒`起至现在的总秒数`('1970-01-01 00:00:00' UTC)`。
 
@@ -33,18 +33,20 @@ updated: 2021-11-28 01:01:00
 	fmt.Println(now.String()) // 2021-11-27 02:06:50.981506 +0800 CST m=+0.000326041
 	
 	
+<br/>	
 	
-### MySQL DateTime 存储信息不带时区
+### 2.2 MySQL DateTime 存储信息不带时区
 
 DataTime 表示范围 `'1000-01-01 00:00:00' to '9999-12-31 23:59:59'`。`5.6.4` 版本之前，`DateTime`占用`8`字节，`5.6.4`之后默认是`5`字节（到秒），如果要更高精度可以配置`Fractional Seconds Precision`， `fsp=1~2`占用`1`字节 ，`3~4`占用 `2`个字节，`5~6`占用`3`个字节， 如`DATETIME(6)` 精确到秒后`6`位，一共占用`8`字节。
 
 需要注意的是：不论是`5.6.4`之前，还是`5.6.4`之后`DateTime`字段里面都没有带时区信息，更多可以看 [MySQL官网文档](https://dev.mysql.com/doc/internals/en/date-and-time-data-type-representation.html)。
 
 
-![Datetime type](./datetime_type.jpg)
+![datetime_type.jpg](https://upload-images.jianshu.io/upload_images/12321605-eeb9a0f6cded28da.jpg?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 
+<br/>
 
-### MySQL Timespan 带时区信息
+### 2.3 MySQL Timespan 带时区信息
 
 
 > TIMESTAMP: A four-byte integer representing seconds UTC since the epoch ('1970-01-01 00:00:00' UTC)
@@ -66,8 +68,9 @@ DataTime 表示范围 `'1000-01-01 00:00:00' to '9999-12-31 23:59:59'`。`5.6.4`
 	user:pwd@tcp(host:port)/db?charset=utf8mb4&parseTime=True&loc=Asia%2FShanghai&time_zone=%27%2B8%3A00%27
 
 
+<br/>
 
-### SQL 数据传输时候，DataTime和Timespan都是字符串传输
+### 2.3 SQL 数据传输时候，DataTime和Timespan都是字符串传输
 
 	DROP TABLE IF EXISTS `dt_test`;
 	CREATE TABLE dt_test (
@@ -85,19 +88,20 @@ DataTime 表示范围 `'1000-01-01 00:00:00' to '9999-12-31 23:59:59'`。`5.6.4`
 
 wireshark 抓包可知SQL传输的时候，DataTime和Timespan都是直接传输不带时区的字符串，如`2021-11-27 14:08:07.3751`这种。
 
-![](./insert_1.jpg)
+![insert_1.jpg](https://upload-images.jianshu.io/upload_images/12321605-84ef5b79baf33dcc.jpg?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 
-![](./insert_2.jpg)
+![insert_2.jpg](https://upload-images.jianshu.io/upload_images/12321605-4fc68b0212a26a53.jpg?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 
-![](./select_req.jpg)
+![select_req.jpg](https://upload-images.jianshu.io/upload_images/12321605-dc877ee3fc100caa.jpg?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 
-![](./select_resp.jpg)
+![select_resp.jpg](https://upload-images.jianshu.io/upload_images/12321605-b95c5bbf8a28a707.jpg?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+<br/>
 
 
+## 三、问题分析
 
-## 问题分析
-
-### Datetime 问题分析
+### 3.1 Datetime 问题分析
 
 上面我们说过`SQL`请求和响应的`Body`里面`Datetime`和`Timespan`字段都是用**时间字符串**，我们用`GORM`执行`SQL`的时候，
 我们传的对`Golang`的`time.Time`，这个`time`类型的时间是怎么最终转换成不带时区的时间字符串呢？翻了下`Go-MySQL-Driver`[代码](https://github.com/go-sql-driver/mysql/blob/master/packets.go#L1119)，
@@ -169,7 +173,9 @@ wireshark 抓包可知SQL传输的时候，DataTime和Timespan都是直接传输
 				return time.Time{}, nil
 			}
 
-### 总结
+<br/>
+
+### 3.2 Datetime 总结
 
 `Datetime`在`MySQL`服务端只是一个字符串，时区信息都是由连接串的`loc`字符串控制的。如果要想时区保证一直，写入和读取的`loc`必须保证一致。
 
@@ -179,10 +185,11 @@ wireshark 抓包可知SQL传输的时候，DataTime和Timespan都是直接传输
 2. 如果时间传的是字符串，或者我们自己写的`RawSQL`，我们需要把`time format`为`loc`时区对应的时间串，不然即使`loc`相同读取出来的值也是不对的。
 
 
-![Datetime type](./datetime.jpg)
+![datetime.jpg](https://upload-images.jianshu.io/upload_images/12321605-e3243effcb8ed367.jpg?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 
+<br/>
 
-### Timespan
+### 3.3 Timespan
 
 `Timespan` 大致流程跟 `Datetime`差不多，只是时间字符串到了服务端，服务端会用`time_zone`加字符串得到`UnixTime`然后保存（个人猜想，并没有去找`MySQL`源码验证）。[是通过简单的代码测试](./time_span.go)和官方文档来验证自己的想法。
 
@@ -192,14 +199,17 @@ wireshark 抓包可知SQL传输的时候，DataTime和Timespan都是直接传输
 
 [TIMESTAMP 和 time_zone 关系 第七段](https://dev.mysql.com/doc/refman/8.0/en/datetime.html)
 
-### 总结
+<br/>
+
+### 3.4 Timespan 总结
 
 如果真的要存时间戳，建议用`binint`存，这样不管数据怎么传输，不管`loc`、`time_zone` 怎么配置。
 
-![Datetime type](./timespan.jpg)
+![timespan.jpg](https://upload-images.jianshu.io/upload_images/12321605-ffc61b32e15393f2.jpg?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 
+<br/>
 
-## 数据传输的时候如何保证数据正确
+## 四、数据传输的时候如何保证数据正确
 
 知道了上面的基本信息以后，数据传输系统要做的事就很明确了。
 
@@ -207,7 +217,7 @@ wireshark 抓包可知SQL传输的时候，DataTime和Timespan都是直接传输
 2. `DTS`数据传输的时候，因为`time`字段都是字符串，需要把时间字符串+`loc`转成时间戳，然后发送到对端。
 
 
-![Datetime type](./dts.png)
+![dts.png](https://upload-images.jianshu.io/upload_images/12321605-ba0159fd7b4faf09.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 
 
 
