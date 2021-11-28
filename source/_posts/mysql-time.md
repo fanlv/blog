@@ -11,17 +11,21 @@ updated: 2021-11-28 01:01:00
 
 ## 一、背景
 
-最近负责一个数据传输的项目，其中一个需求就是能把一个`DB`里面的数据拉出来 ，然后回放到另外一个同构的`DB`。两个`DB`的服务不在一个时区（其实这不是重点），可能配置不同。之前有过类似的项目，当时是基建的同事负责做数据同步，同步过去以后`DateTime`、`Timespan`字段的时区信息都丢了。老板让我调研下，不要踩之前的坑。
+最近负责一个数据传输的项目，其中一个需求就是能把一个`DB`里面的数据拉出来 ，然后回放到另外一个同构的`DB`。两个`DB`的服务不在一个时区（其实这不是重点），可能配置不同。之前有过类似的项目，当时是基建的同事负责做数据同步，同步过去以后`DateTime`、`Timespan`字段的时区信息都丢了。老板让我调研下问题根因，不要踩之前的坑。
 
-最早的时候看了下同事写的当时`MySQL`时区信息丢失的问题总结文档，文档里面当时把`DateTime`和`Timespan`两个时区问题混为一起了，也没分析本质原因，导致我当时没看太明白，然后的武断的认为，之所以时区丢失了，是因为基础组件同步`DateTime`和`TimeSpan`的时候同步的是字符串，比如`2021-11-27 10:49:35.857969` 这种信息，我们传输的时候，只要转`timestamp`然后存过去就行了（其实并没有那么简单，后面会说）。
+最早的时候看了下同事写的当时`MySQL`时区信息丢失的问题总结文档，文档里面当时把`DateTime`和`Timespan`两个时区问题混为一起了，也没分析本质原因，导致我当时没看太明白，然后的武断的认为，之所以时区丢失了，是因为基础组件同步`DateTime`和`TimeSpan`的时候同步的是字符串，比如`2021-11-27 10:49:35.857969`这种信息，我们传输的时候，只要转`UnixTime`然后传过去就行了（这个其实只是问题之一，其实还跟`time_zone`、`loc`配置相关，后面会说）。
 
-先说结论，如果你能保证`所有项目`连接`DB`的`DSN`配置的`loc`和`time_zone`（`time_zone`没有配置的话会用`MySQL`服务端的默认配置） 都是一样的，那不用看下去了。不管你数据在不同`DB`之间怎么传输，服务读取的`DB`的时区都是正确的。
+先说结论，如果你能保证`所有项目`连接`DB`的`DSN`配置的`loc`和`time_zone`（`time_zone`没有配置的话会用`MySQL`服务端的默认配置） 都是一样的，那不用看下去了。不管你数据在不同`DB`之间怎么传输，服务读取的`DB`的时区都是符合你的预期的。
 
 ## 二、基础知识
 
-### 2.1 Unix时间戳带时区信息
+### 2.1 Unix时间戳能确定唯一时刻
 
 [UNIX时间](https://zh.wikipedia.org/wiki/UNIX%E6%97%B6%E9%97%B4)，是UNIX或类UNIX系统使用的时间表示方式：从`UTC 1970年1月1日0时0分0秒`起至现在的总秒数`('1970-01-01 00:00:00' UTC)`。
+
+时间字符串`2021-11-27 02:06:50`是不能确定确定唯一时刻的（直白点说就是中国人说的`2021-11-27 02:06:50`和美国人说的`2021-11-27 02:06:50`不是同一时刻），简单说就是 `UnixTime` = `2021-11-27 02:06:50` + `time_zone`,`UnixTime` + `time_zone` 可以得到不同地区人看到的`time_string`。
+
+我们在数据传输和过程中，是希望这个唯一时刻信息不会丢失。我发一条消息在中国时间是`2021-11-27 02:06:50`，在其他地方应该是显示其他地方的当地时间。
 
 	t := time.Unix(1637950010, 0)
 	fmt.Println(t.UTC().String()) // 2021-11-26 18:06:50 +0000 UTC
@@ -60,7 +64,7 @@ DataTime 表示范围 `'1000-01-01 00:00:00' to '9999-12-31 23:59:59'`。`5.6.4`
 
 `time_zone` 有三种设置方法
 
-	set time_zone = '+8:00'; // 设置当前 session 的 time_zone
+	set time_zone = '+8:00'; // 设置当前 session 的 time_zone，立即生效
 	set global time_zone = '+8:00'; // 设置MySQL全局默认配置，新的连接才生效
 	
 	dsn里面指定 time_zone='+8:00'
@@ -103,8 +107,7 @@ wireshark 抓包可知SQL传输的时候，DataTime和Timespan都是直接传输
 
 ### 3.1 Datetime 问题分析
 
-上面我们说过`SQL`请求和响应的`Body`里面`Datetime`和`Timespan`字段都是用**时间字符串**，我们用`GORM`执行`SQL`的时候，
-我们传的对`Golang`的`time.Time`，这个`time`类型的时间是怎么最终转换成不带时区的时间字符串呢？翻了下`Go-MySQL-Driver`[代码](https://github.com/go-sql-driver/mysql/blob/master/packets.go#L1119)，看到有下面这段逻辑。
+上面我们说过`SQL`请求和响应的`Data`里面`Datetime`和`Timespan`字段都是用**时间字符串**，我们用`GORM`执行`SQL`的时候，我们传的对`Golang`的`time.Time`，这个`time`类型的时间是怎么最终转换成不带时区的时间字符串呢？翻了下`go-sql-driver`[代码](https://github.com/go-sql-driver/mysql/blob/master/packets.go#L1119)，看到有下面这段逻辑。
 
     case time.Time:
         paramTypes[i+i] = byte(fieldTypeString)
@@ -125,7 +128,7 @@ wireshark 抓包可知SQL传输的时候，DataTime和Timespan都是直接传输
 
 看下 [appendDateTime](https://github.com/go-sql-driver/mysql/blob/6cf3092b0e12f6e197de3ed6aa2acfeac322a9bb/utils.go#L279) 函数逻辑就是把`time.Time`转成`mc.cfg.Loc`时区的字符串。
 
-举例说明就是，我们插入一个`SQL`的时候，假设是代码里面 `time.Now()` 获取了一个时间对象，这个时间对象是有时区信息的，时区是当前系统的时区。传到`go-sql-driver`里面去以后，`driver`需要把这个对象转成不带时区的字符串，具体要转成哪个时区的字符串，就是由`mc.cfg.Loc`决定的。我们再往上跟下看下`mc.cfg.Loc`是哪里传入的。
+举例说明就是，我们插入一个`SQL`的时候，假设是代码里面 `time.Now()` 获取了一个时间对象，这个时间对象是有时区信息的（或者说是能确定唯一时刻的），时区是当前系统的时区。传到`go-sql-driver`里面去以后，`driver`需要把这个对象转成不带时区的字符串，具体要转成哪个时区的字符串，就是由`mc.cfg.Loc`决定的。我们再往上跟下看下`mc.cfg.Loc`是哪里传入的。
 
 [找到如下代码](https://github.com/go-sql-driver/mysql/blob/master/connector.go#L23)，由代码可以知道，`loc`信息是我们配置`dns`连接串的时候传入的。
 
@@ -180,7 +183,7 @@ wireshark 抓包可知SQL传输的时候，DataTime和Timespan都是直接传输
 
 需要注意几点：
 
-1. 如果们插入的是`time.Time`对象，系统的时区信息对`MySQL`的`Datetime`字段是没有影响的。
+1. 如果们插入的是`time.Time` (能确定唯一时刻)对象，系统的时区信息对`MySQL`的`Datetime`字段是没有影响的，因为转换`时间字符串`的时候用的是`dsn`的`loc`信息。
 2. 如果时间传的是字符串，或者我们自己写的`RawSQL`，我们需要把`time format`为`loc`时区对应的时间串，不然即使`loc`相同读取出来的值也是不对的。
 
 
@@ -202,7 +205,7 @@ wireshark 抓包可知SQL传输的时候，DataTime和Timespan都是直接传输
 
 ### 3.4 Timespan 总结
 
-如果真的要存时间戳，建议用`binint`存，这样不管数据怎么传输，不管`loc`、`time_zone` 怎么配置。
+如果真的要存时间戳，建议用`binint`存，这样不管数据怎么传输，不管`loc`、`time_zone` 怎么配置，都没有时区问题。
 
 ![timespan.jpg](https://upload-images.jianshu.io/upload_images/12321605-ffc61b32e15393f2.jpg?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 
@@ -213,7 +216,7 @@ wireshark 抓包可知SQL传输的时候，DataTime和Timespan都是直接传输
 知道了上面的基本信息以后，数据传输系统要做的事就很明确了。
 
 1. 读取和写入的数据的时候，`loc`和`time_zone`配置跟业务方保持一致就行了。
-2. `DTS`数据传输的时候，因为`time`字段都是字符串，需要把时间字符串+`loc`转成时间戳，然后发送到对端。
+2. `DTS`数据传输的时候，因为`binlog`字段都是字符串，需要把`时间字符串`+`loc`转成时间戳，然后发送到对端。
 
 
 ![dts.png](https://upload-images.jianshu.io/upload_images/12321605-ba0159fd7b4faf09.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
