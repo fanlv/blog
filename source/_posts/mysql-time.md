@@ -208,8 +208,9 @@ wireshark 抓包可知SQL传输的时候，DataTime和Timespan都是直接传输
 
 需要注意几点：
 
-1. 如果们插入的是`time.Time` (能确定唯一时刻)对象，系统的时区信息对`MySQL`的`Datetime`字段是没有影响的，因为转换`时间字符串`的时候用的是`dsn`的`loc`信息。
-2. 如果时间传的是字符串，或者我们自己写的`RawSQL`，我们需要把`time format`为`loc`时区对应的时间串，不然即使`loc`相同读取出来的值也是不对的。
+1. `loc`配置是给插入的时候用`time.Time`转时间字符串用的。如果你裸写插入`SQL`（RawSQL），`loc`怎么配置，都不会影响时间串，数据存的时间，就是你`Insert`语句里面拼接的时间串。
+2. 如果们插入的是`time.Time` (能确定唯一时刻)对象，插入客户端所在的系统的时区信息对插入结果没影响，因为客户端是用`time.Time`+`loc`来得到时间字符串。
+3. `loc` 没有配置的话，默认是`UTC0`
 
 
 ![datetime.jpg](https://upload-images.jianshu.io/upload_images/12321605-e3243effcb8ed367.jpg?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
@@ -245,6 +246,22 @@ wireshark 抓包可知SQL传输的时候，DataTime和Timespan都是直接传输
 
 
 ![dts.png](https://upload-images.jianshu.io/upload_images/12321605-ba0159fd7b4faf09.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+## 五、问题本质
+
+`MySQL` 存储、写入读取传输时候都是时间字符。客户端发送和接收的时候需要用`loc`来标明这个字符串的时区信息，所以读取和写入的`loc`必须要保证是相同的，所以这个字符串才有相同的语义。
+
+如果所有业务方，都不设置`loc`，统一都是默认配置。时间戳，直接用`bigint`存那就没有任何时区问题。世界美好一点不好吗？何必自己给自己折腾一堆莫名其妙问题。
+
+
+
+
+
+
+
+
+
+
 
 
 
