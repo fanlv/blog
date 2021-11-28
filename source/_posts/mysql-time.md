@@ -27,7 +27,7 @@ updated: 2021-11-28 01:01:00
 
 我们在数据传输和过程中，是希望这个唯一时刻信息不会丢失。我发一条消息在中国时间是`2021-11-27 02:06:50`，在其他地方应该是显示其他地方的当地时间。
 
-	t := time.Unix(1637950010, 0)
+	t := time.Unix(1637950010, 0) // 时刻唯一确定，可以打印这个时刻不同时区的时间串
 	fmt.Println(t.UTC().String()) // 2021-11-26 18:06:50 +0000 UTC
 	fmt.Println(t.String()) // 2021-11-27 02:06:50 +0800 CST
 	
@@ -128,9 +128,32 @@ wireshark 抓包可知SQL传输的时候，DataTime和Timespan都是直接传输
 
 看下 [appendDateTime](https://github.com/go-sql-driver/mysql/blob/6cf3092b0e12f6e197de3ed6aa2acfeac322a9bb/utils.go#L279) 函数逻辑就是把`time.Time`转成`mc.cfg.Loc`时区的字符串。
 
-举例说明就是，我们插入一个`SQL`的时候，假设是代码里面 `time.Now()` 获取了一个时间对象，这个时间对象是有时区信息的（或者说是能确定唯一时刻的），时区是当前系统的时区。传到`go-sql-driver`里面去以后，`driver`需要把这个对象转成不带时区的字符串，具体要转成哪个时区的字符串，就是由`mc.cfg.Loc`决定的。我们再往上跟下看下`mc.cfg.Loc`是哪里传入的。
+举例说明就是，我们插入一个`SQL`的时候，假设是代码里面 `time.Now()` 获取了一个时间对象，这个时间对象是有时区信息的（或者说是能确定唯一时刻的），时区是当前系统的时区。传到`go-sql-driver`里面去以后，`driver`需要把这个对象转成不带时区的字符串，具体要转成哪个时区的字符串，就是由`mc.cfg.Loc`决定的。我们再往上跟下看下`mc.cfg.Loc`是哪里传入的。找到如下代码，由代码可以知道，`loc`信息是我们配置`dns`连接串的时候传入的,`loc`不传的话，默认是`UTC 0`时间
 
-[找到如下代码](https://github.com/go-sql-driver/mysql/blob/master/connector.go#L23)，由代码可以知道，`loc`信息是我们配置`dns`连接串的时候传入的。
+	https://github.com/go-sql-driver/mysql/blob/master/driver.go#L73
+	// OpenConnector implements driver.DriverContext.
+	func (d MySQLDriver) OpenConnector(dsn string) (driver.Connector, error) {
+		cfg, err := ParseDSN(dsn) // https://github.com/go-sql-driver/mysql/blob/6cf3092b0e12f6e197de3ed6aa2acfeac322a9bb/dsn.go#L291
+		if err != nil {
+			return nil, err
+		}
+		return &connector{
+			cfg: cfg,
+		}, nil
+	}
+	
+	// https://github.com/go-sql-driver/mysql/blob/6cf3092b0e12f6e197de3ed6aa2acfeac322a9bb/dsn.go#L68
+	// NewConfig creates a new Config and sets default values.
+	func NewConfig() *Config {
+		return &Config{
+			Collation:            defaultCollation,
+			Loc:                  time.UTC, // loc 传的话，默认是UTC时间
+			MaxAllowedPacket:     defaultMaxAllowedPacket,
+			AllowNativePasswords: true,
+			CheckConnLiveness:    true,
+		}
+	}
+	
 
 	// Connect implements driver.Connector interface.
 	// Connect returns a connection to the database.
@@ -145,6 +168,8 @@ wireshark 抓包可知SQL传输的时候，DataTime和Timespan都是直接传输
 			cfg:              c.cfg,
 		}
 		mc.parseTime = mc.cfg.ParseTime
+		
+
 	
 
 再来看查询的时候，时间字符串的转换问题，上面用`WireShark`抓包的时候，知道我们执行`Select`查询数据的时候，`MySQL`给我们返回的也是时间字符串。那客户端代码是如何转成`time.Time`对象的？我们知道`dsn`里面有个`parseTime`字段是来控制，从`parseTime`相关代码我们可以找到[如下代码](https://github.com/go-sql-driver/mysql/blob/master/packets.go#L789)。
