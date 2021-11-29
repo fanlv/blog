@@ -1,5 +1,5 @@
 ---
-title: MySQL DateTime和Timespan时区问题
+title: MySQL DateTime和TIMESTAMP时区问题
 tags:
   - Backend
   - MySQL
@@ -11,9 +11,9 @@ updated: 2021-11-28 01:01:00
 
 ## 一、背景
 
-最近负责一个数据传输的项目，其中一个需求就是能把一个`DB`里面的数据拉出来 ，然后回放到另外一个同构的`DB`。两个`DB`的服务不在一个时区（其实这不是重点），可能配置不同。之前有过类似的项目，当时是基建的同事负责做数据同步，同步过去以后`DateTime`、`Timespan`字段的时区信息都丢了。老板让我调研下问题根因，不要踩之前的坑。
+最近负责一个数据传输的项目，其中一个需求就是能把一个`DB`里面的数据拉出来 ，然后回放到另外一个同构的`DB`。两个`DB`的服务不在一个时区（其实这不是重点），可能配置不同。之前有过类似的项目，当时是基建的同事负责做数据同步，同步过去以后`DateTime`、`TIMESTAMP`字段的时区信息都丢了。老板让我调研下问题根因，不要踩之前的坑。
 
-最早的时候看了下同事写的当时`MySQL`时区信息丢失的问题总结文档，文档里面当时把`DateTime`和`Timespan`两个时区问题混为一起了，也没分析本质原因，导致我当时没看太明白，然后的武断的认为，之所以时区丢失了，是因为基础组件同步`DateTime`和`TimeSpan`的时候同步的是字符串，比如`2021-11-27 10:49:35.857969`这种信息，我们传输的时候，只要转`UnixTime`然后传过去就行了（这个其实只是问题之一，其实还跟`time_zone`、`loc`配置相关，后面会说）。
+最早的时候看了下同事写的当时`MySQL`时区信息丢失的问题总结文档，文档里面当时把`DateTime`和`TIMESTAMP`两个时区问题混为一起了，也没分析本质原因，导致我当时没看太明白，然后的武断的认为，之所以时区丢失了，是因为基础组件同步`DateTime`和`TIMESTAMP`的时候同步的是字符串，比如`2021-11-27 10:49:35.857969`这种信息，我们传输的时候，只要转`UnixTime`然后传过去就行了（这个其实只是问题之一，其实还跟`time_zone`、`loc`配置相关，后面会说）。
 
 先说结论，如果你能保证`所有项目`连接`DB`的`DSN`配置的`loc`和`time_zone`（`time_zone`没有配置的话会用`MySQL`服务端的默认配置） 都是一样的，那不用看下去了。不管你数据在不同`DB`之间怎么传输，服务读取的`DB`的时区都是符合你的预期的。
 
@@ -25,7 +25,7 @@ updated: 2021-11-28 01:01:00
 
 时间字符串`2021-11-27 02:06:50`是不能确定确定唯一时刻的（直白点说就是中国人说的`2021-11-27 02:06:50`和美国人说的`2021-11-27 02:06:50`不是同一时刻），简单说就是 `UnixTime` = `2021-11-27 02:06:50` + `time_zone`,`UnixTime` + `time_zone` 可以得到不同地区人看到的`time_string`。
 
-我们在数据传输和过程中，是希望这个唯一时刻信息不会丢失。我发一条消息在中国时间是`2021-11-27 02:06:50`，在其他地方应该是显示其他地方的当地时间。
+我们在数据传输和过程中，**是希望这个唯一时刻保持不变，并不是希望时区保持不变**。我发一条消息在中国时间是`2021-11-27 02:06:50`，在其他地方应该是显示其他地方的当地时间。
 
 	t := time.Unix(1637950010, 0) // 时刻唯一确定，可以打印这个时刻不同时区的时间串
 	fmt.Println(t.UTC().String()) // 2021-11-26 18:06:50 +0000 UTC
@@ -42,25 +42,25 @@ updated: 2021-11-28 01:01:00
 
 DataTime 表示范围 `'1000-01-01 00:00:00' to '9999-12-31 23:59:59'`。`5.6.4` 版本之前，`DateTime`占用`8`字节，`5.6.4`之后默认是`5`字节（到秒），如果要更高精度可以配置`Fractional Seconds Precision`， `fsp=1~2`占用`1`字节 ，`3~4`占用 `2`个字节，`5~6`占用`3`个字节， 如`DATETIME(6)` 精确到秒后`6`位，一共占用`8`字节。
 
-需要注意的是：不论是`5.6.4`之前，还是`5.6.4`之后`DateTime`字段里面都没有带时区信息，更多可以看 [MySQL官网文档](https://dev.mysql.com/doc/internals/en/date-and-time-data-type-representation.html)。
+需要注意的是：不论是`5.6.4`之前，还是`5.6.4`之后`DateTime`字段里面都**没有带时区信息，不能确定唯一时刻**，更多可以看 [MySQL官网文档](https://dev.mysql.com/doc/internals/en/date-and-time-data-type-representation.html)。
 
 
 ![datetime_type.jpg](https://upload-images.jianshu.io/upload_images/12321605-eeb9a0f6cded28da.jpg?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 
 <br/>
 
-### 2.3 MySQL Timespan 带时区信息
+### 2.3 MySQL TIMESTAMP 和 time_zone
 
 
 > TIMESTAMP: A four-byte integer representing seconds UTC since the epoch ('1970-01-01 00:00:00' UTC)
 > The TIMESTAMP data type is used for values that contain both date and time parts. TIMESTAMP has a range of '1970-01-01 00:00:01' UTC to '2038-01-19 03:14:07' UTC.
 
 
-`timespan`就是存的`Unix`时间戳，表示范围是`'1970-01-01 00:00:01' UTC to '2038-01-19 03:14:07'`，是不是`timespan`就没有时区问题？并不是。[MySQL官方文档有如下一段话如下](https://dev.mysql.com/doc/refman/8.0/en/datetime.html)：
+`TIMESTAMP`就是存的`Unix`时间戳，表示范围是`'1970-01-01 00:00:01' UTC to '2038-01-19 03:14:07'`，是不是`TIMESTAMP`就没有时区问题？并不是。[MySQL官方文档有如下一段话如下](https://dev.mysql.com/doc/refman/8.0/en/datetime.html)：
 
 > MySQL converts TIMESTAMP values from the current time zone to UTC for storage, and back from UTC to the current time zone for retrieval. (This does not occur for other types such as DATETIME.) By default, the current time zone for each connection is the server's time. The time zone can be set on a per-connection basis. As long as the time zone setting remains constant, you get back the same value you store. If you store a TIMESTAMP value, and then change the time zone and retrieve the value, the retrieved value is different from the value you stored. This occurs because the same time zone was not used for conversion in both directions. The current time zone is available as the value of the time_zone system variable. For more information, see Section 5.1.15, “MySQL Server Time Zone Support”.
 
-简单说，每个`session`可以设置不同的`time_zone`，如果你设置`session`用的`time_zone`和读取`session`用的`time_zone`不一样，那你会得到错误/不同的值。说白了一个`timespan`字段，写入和读取的`session`必须一样。针对单个`DB`的场景，建议所有`session`的`dsn`都不配置`time_zone`。
+简单说，每个`session`可以设置不同的`time_zone`，如果你设置`session`用的`time_zone`和读取`session`用的`time_zone`不一样，那你会得到错误/不同的值。说白了一个`TIMESTAMP`字段，写入和读取的`session`必须一样。针对单个`DB`的场景，建议所有`session`的`dsn`都不配置`time_zone`。
 
 `time_zone` 有三种设置方法
 
@@ -73,7 +73,7 @@ DataTime 表示范围 `'1000-01-01 00:00:00' to '9999-12-31 23:59:59'`。`5.6.4`
 
 <br/>
 
-### 2.3 SQL 数据传输时候，DataTime和Timespan都是字符串传输
+### 2.3 SQL 数据传输时候，DataTime和TIMESTAMP都是字符串传输
 
 	DROP TABLE IF EXISTS `ts_test`;
 	CREATE TABLE ts_test (
@@ -90,7 +90,7 @@ DataTime 表示范围 `'1000-01-01 00:00:00' to '9999-12-31 23:59:59'`。`5.6.4`
 	INSERT INTO `dt_test` (`loc`,`program_insert_time`,`dt`) VALUES ('Asia/Shanghai','2021-11-27 14:08:07.3751 +0000 UTC','2021-11-27 14:08:07.3751')
 	SELECT * FORM `dt_test`
 
-wireshark 抓包可知SQL传输的时候，DataTime和Timespan都是直接传输不带时区的字符串，如`2021-11-27 14:08:07.3751`这种。
+wireshark 抓包可知SQL传输的时候，DataTime和TIMESTAMP都是直接传输不带时区的字符串，如`2021-11-27 14:08:07.3751`这种。
 
 ![insert_1.jpg](https://upload-images.jianshu.io/upload_images/12321605-84ef5b79baf33dcc.jpg?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 
@@ -107,7 +107,7 @@ wireshark 抓包可知SQL传输的时候，DataTime和Timespan都是直接传输
 
 ### 3.1 Datetime 问题分析
 
-上面我们说过`SQL`请求和响应的`Data`里面`Datetime`和`Timespan`字段都是用**时间字符串**，我们用`GORM`执行`SQL`的时候，我们传的对`Golang`的`time.Time`，这个`time`类型的时间是怎么最终转换成不带时区的时间字符串呢？翻了下`go-sql-driver`[代码](https://github.com/go-sql-driver/mysql/blob/master/packets.go#L1119)，看到有下面这段逻辑。
+上面我们说过`SQL`请求和响应的`Data`里面`Datetime`和`TIMESTAMP`字段都是用**时间字符串**，我们用`GORM`执行`SQL`的时候，我们传的对`Golang`的`time.Time`，这个`time`类型的时间是怎么最终转换成不带时区的时间字符串呢？翻了下`go-sql-driver`[代码](https://github.com/go-sql-driver/mysql/blob/master/packets.go#L1119)，看到有下面这段逻辑。
 
     case time.Time:
         paramTypes[i+i] = byte(fieldTypeString)
@@ -217,9 +217,9 @@ wireshark 抓包可知SQL传输的时候，DataTime和Timespan都是直接传输
 
 <br/>
 
-### 3.3 Timespan
+### 3.3 TIMESTAMP
 
-`Timespan`在`go-sql-driver`里面的处理流程跟`Datetime`一样，区别是是时间字符串到了服务端，服务端会用`time_zone`加字符串得到`UnixTime`然后保存（这部分只是个人猜想，并没有去找`MySQL`源码验证，[只是通过简单的代码测试](./time_span.go)和官方文档来验证自己的想法），从结果上来看，读入和写入的`session`的`time_zone`必须保持一致读的数据才是对的。
+`TIMESTAMP`在`go-sql-driver`里面的处理流程跟`Datetime`一样，区别是是时间字符串到了服务端，服务端会用`time_zone`加字符串得到`UnixTime`然后保存（这部分只是个人猜想，并没有去找`MySQL`源码验证，[只是通过简单的代码测试](./time_span.go)和官方文档来验证自己的想法），从结果上来看，读入和写入的`session`的`time_zone`必须保持一致读的数据才是对的。
 
 [time_zone 相关官方文档](https://dev.mysql.com/doc/refman/8.0/en/time-zone-support.html)
 
@@ -229,11 +229,11 @@ wireshark 抓包可知SQL传输的时候，DataTime和Timespan都是直接传输
 
 <br/>
 
-### 3.4 Timespan 总结
+### 3.4 TIMESTAMP 总结
 
 如果真的要存时间戳，建议用`binint`存，这样不管数据怎么传输，不管`loc`、`time_zone` 怎么配置，都没有时区问题。
 
-![timespan.jpg](https://upload-images.jianshu.io/upload_images/12321605-ffc61b32e15393f2.jpg?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+![TIMESTAMP.jpg](https://upload-images.jianshu.io/upload_images/12321605-ffc61b32e15393f2.jpg?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 
 <br/>
 
