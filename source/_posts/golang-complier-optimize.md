@@ -36,7 +36,7 @@ updated: 2023-12-18 12:13:14
 
 	
 	
-今年`8`月份的时候跟一个朋友做技术交流的时候，朋友指出我这个`Demo`里面`thread1`不会结束，是因为`running = false`这句代码被编译器优化掉了，不是因为线程可见性的问题导致不会结束，[当时转汇编](https://godbolt.org/z/ba35MsGeY) 看了下，发现的确是被优化的掉了，但是一直没想清楚是为什么，后面因为一直都在忙公司新项目（`9、10`双月周末自己就主动打了`7`天黑工，不是我卷，只是简单想把负责的项目做好），事情比较多，人一直处于超负荷状态，所以也没闲心去研究这些事情了。一拖就是几个月，一眨眼马上`2021`年都要过去了，想着再不研究下，这个技术债不知道要拖到什么时候去了，所以这两周末花时间看了下。
+今年`8`月份的时候跟一个朋友做技术交流的时候，朋友指出我这个`Demo`里面`thread1`不会结束，是因为`running = false`这句代码被编译器优化掉了，不是因为线程可见性的问题导致不会结束，[当时转汇编](https://godbolt.org/z/ba35MsGeY) 看了下，发现的确是被优化的掉了，但是一直没想清楚是为什么，后面因为一直都在忙公司新项目（最近几个月周末自己主动打了`8`天黑工，不是我卷，只是简单想把负责的项目做好）。总之就是事情比较多，人一直处于超负荷状态，所以也没闲心去研究这些事情了。一拖就是几个月，一眨眼马上`2021`年都要过去了，想着再不研究下，这个技术债不知道要拖到什么时候去了，所以这两周末花时间看了下。
 
 先说结论，上面的`for`中的`running = false` 的确是被优化掉了，`thread2`的`for`循环汇编代码如下（[完整汇编代码点我](https://godbolt.org/z/ba35MsGeY)）：
 
@@ -62,7 +62,7 @@ updated: 2023-12-18 12:13:14
 
 看到编译器这个汇编代码，我第一反应是感觉这个不符合直觉（因为优化后的代码改变了程序含义），是不是`Go `编译器的`Bug`？
 
-为了验证是不是`Go`编译器`BUG`，然后我用`C`写了个类似的 [Demo](https://godbolt.org/z/foME4ahYh)，分别用 [GCC](https://godbolt.org/z/ETrdf8d77) 和 [LLVM](https://godbolt.org/z/Ea758P863) 去测试，发现在 `-O1`的优化级别下，编译器都会把`for`循环里面的变量赋值给优化掉，具体汇编代码如下：
+为了验证是不是`Go`编译器`BUG`，然后我用`C`写了个类似的 [Demo](https://godbolt.org/z/ETrdf8d77)，分别用 [GCC](https://godbolt.org/z/ETrdf8d77) 和 [LLVM](https://godbolt.org/z/Ea758P863) 去测试，发现在 `-O1`的优化级别下，编译器都会把`for`循环里面的变量赋值给优化掉，具体汇编代码如下：
 
 	void thread_test1( void *ptr) {
 	    while (1) {
@@ -101,7 +101,7 @@ updated: 2023-12-18 12:13:14
 1. 是很多解释型的语言，可以直接执行`IR`，比如`Python`和`Java`。这样的话，编译器生成`IR`以后就完成任务了，没有必要生成最终的汇编代码。
 2. 我们生成代码的时候，需要做大量的优化工作。而很多优化工作没有必要基于汇编代码来做，而是可以基于`IR`，用统一的算法来完成。
 
-像`GCC`、`LLVM`这种编译器，可以支持`N`种不同的源语言，并可以为`M`个不同机器码，如果没有`IR`，直接由源语言直接生成真实的机器代码，这个工作量是巨大的。
+像`GCC`、`LLVM`这种编译器，可以支持`N`种不同的源语言，并可以生成`M`个不同机器码，如果没有`IR`，直接由源语言直接生成真实的机器代码，这个工作量是巨大的。
 
 ![image.png](https://upload-images.jianshu.io/upload_images/12321605-34f1f5d76e859b3b.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 
@@ -245,7 +245,7 @@ updated: 2023-12-18 12:13:14
 
 在某些优化场景下，因为循环理解的代码并不影响返回结果，编译器会直接优化掉循环的代码，只剩一个`return 1;`
 
-还有一些场景，激进的死代码删除算法会删除没有输出的无线循环，从而改变程序的含义。因为在原来的程序不产生任何输出的情况下，删除这种无线循环后，程序会执行改循环之后的语句，而这些语句有可能产生输出。在许多环境下，这被认为是不可接受的（详见《编译原理-虎书》`19.5`章节）。
+还有一些场景，激进的死代码删除算法会删除没有输出的无线循环，从而改变程序的含义。因为在原来的程序不产生任何输出的情况下，删除这种无线循环后，程序会执行改循环之后的语句，而这些语句有可能产生输出。在许多环境下，这被认为是不可接受的（详见[《现代编译原理》- 虎书](https://book.douban.com/subject/1806974/)`19.5`章节）。
 
 
 
@@ -262,7 +262,7 @@ updated: 2023-12-18 12:13:14
 5. 使用机器特有的指令。
 
 
-### 2.7 寄存器使用
+### 2.7 寄存器分配和指派
 
 代码生成的关键问题之一是决定哪个值放在寄存器里面，**寄存器是目标机上运行速度最快的计算单元**，但是我们通常没有足够的寄存器来存放所有的值。没有存放在寄存器中的值必须存放在内存中。只涉及寄存器运算分量的指令比那些涉及内运算分量的指令运行的快，因此，有效利用寄存器非常重要。
 
@@ -302,16 +302,16 @@ updated: 2023-12-18 12:13:14
 1. `Parsing`，词法分析和语法分析，词法分析器代码主要在`scanner.go`中，语法分析器代码主要在`parser.go`中，`Go`的`AST`的节点定义在`nodes.go`中。
 2. `Type-checking and AST transformations`，语义分析（类型检查和`AST`变换），语义分析的代码在`typecheck.go`中，主要做`类型检查`、`名称消解（Name Resolution）`、`类型推导`、`内联优化`、`逃逸分析`等。
 3. `Generic SSA`，生成`SSA`格式的`IR`，`gc`的`IR`是基于控制流图`CFG`的。一个函数会被分成多个`基本块`，`基本块`中包含了一行行的`指令`。`Go SSA`中有三个比较重要的概念，分别是 [Value](https://github.com/golang/go/blob/release-branch.go1.16/src/cmd/compile/internal/ssa/value.go#L18) 、 [Block](https://github.com/golang/go/blob/release-branch.go1.16/src/cmd/compile/internal/ssa/block.go#L12)、[Func](https://github.com/golang/go/blob/release-branch.go1.16/src/cmd/compile/internal/ssa/func.go#L26)。
-	* `Value` 是`SSA`的最主要构造单元，它可以**定义一次、使用多次**。在定义一个`Value`的时候，需要一个标识符`ID`作为名称、产生该`Value`的操作码（[Op](https://github.com/golang/go/blob/release-branch.go1.16/src/cmd/compile/internal/ssa/op.go#L19)）、一个类型（[Type](https://github.com/golang/go/blob/release-branch.go1.16/src/cmd/compile/internal/types/type.go#L118)，就是代码中`<>`里面的值），以及一些参数。
+	* `Value` 是`SSA`的最主要构造单元，它可以定义一次、使用多次。在定义一个`Value`的时候，需要一个标识符`ID`作为名称、产生该`Value`的操作码（[Op](https://github.com/golang/go/blob/release-branch.go1.16/src/cmd/compile/internal/ssa/op.go#L19)）、一个类型（[Type](https://github.com/golang/go/blob/release-branch.go1.16/src/cmd/compile/internal/types/type.go#L118)，就是代码中`<>`里面的值），以及一些参数。
 	* `Block`，基本块有三种：简单（`Plain`）基本块，它只有一个后继基本块；退出（`Exit`）基本块，它的最后一个指令是一个返回指令；还有`if`基本块，它有一个`控制值`，并且它会根据该值是`true`还是`false`，跳转到不同的基本块。
 	* `Func`，函数是由多个基本块构成的。它必须有一个入口基本块（`Entry Block`），但可以有`0`到多个退出基本块，就像一个`Go`函数允许包含多个`Return`语句一样。
-4. `Generating machine code`，生成机器码，主要代码在 [cmd/compile/internal/gc/ssa.go](https://github.com/golang/go/blob/release-branch.go1.16/src/cmd/compile/internal/gc/ssa.go#L6296) 中。需要说的是，`gc`生成的汇编代码是`Plan9`汇编，是一种`伪汇编`，它是一种半抽象的汇编代码。在生成特定`CPU`的机器码的时候，它还会做一些转换，值得一提的是`gc`并没有做`指令排序`的工作。
+4. `Generating machine code`，生成机器码，主要代码在 [cmd/compile/internal/gc/ssa.go](https://github.com/golang/go/blob/release-branch.go1.16/src/cmd/compile/internal/gc/ssa.go#L6296) 中。需要说的是，`gc`生成的汇编代码是`Plan9`汇编，是一种`伪汇编`，它是一种半抽象的汇编代码。在生成特定`CPU`的机器码的时候，它还会做一些转换，值得一提的是`gc`并没有做`指令排序`的优化工作。
   
 `Go compiler SSA`更多介绍，可以看`gc SSA `官方 [README.MD](https://github.com/golang/go/blob/release-branch.go1.16/src/cmd/compile/internal/ssa/README.md)
 
-`gc`提供了一个生成可视化`SSA`的`IR`的选项，只要我们在执行`go build`设置环境变量`GOSSAFUNC`为想打印`IR`的函数名，`gc`会生成一个`ssa.html`文件。`ssa.html`文件会记录了编译器为了优化我们代码所经过的所有步骤和每个步骤的耗时。如果想在控制台也输出相关代码，可以在函数名后面加上`+`。[具体代码可看](https://github.com/golang/go/blob/release-branch.go1.16/src/cmd/compile/internal/gc/main.go#L525)
+`gc`提供了一个生成可视化`SSA`的`IR`的选项，只要我们在执行`go build`设置环境变量`GOSSAFUNC`为想打印`IR`的函数名，`gc`会生成一个`ssa.html`文件。`ssa.html`文件会记录了编译器为了优化我们代码所经过的所有步骤和每个步骤的耗时。如果想在控制台也输出相关代码，可以在函数名后面加上`+`。[具体代码点我查看](https://github.com/golang/go/blob/release-branch.go1.16/src/cmd/compile/internal/gc/main.go#L525)
 
-假如我要看`mian`包下面函数名为`thread1`的`IR`优化过程，可以执行如下命令
+假如我要看`mian`包下面函数名为`thread1`的`IR`优化过程/代码，可以执行如下命令
 
 	GOSSAFUNC=main.thread1+ go build -gcflags="-N -l" ./demo.go
 
@@ -416,7 +416,7 @@ updated: 2023-12-18 12:13:14
 	// when they are done with the return values.
 	func liveValues(f *Func, reachable []bool) (live []bool, liveOrderStmts []*Value) {
 		// ..... 初始化 live []bool ，默认全部是Dead/false
-		// ..... 如果是寄存器分配函数，全部设置为存活
+		// ..... 如果是寄存器分配函数，全部设置为存活，我们先无视
 		// ..... 内联相关代码，我们先无视
 		
 		// Find all live values
@@ -584,7 +584,7 @@ updated: 2023-12-18 12:13:14
 
 上面，我们分析了`gc`代码，知道了编译器是怎么一步步把`for`循环中`body`的代码优化掉的。但是我们并不知道编译器基于什么的考量来做这个优化的。查阅了下`Go`编译器的各种资料，也没有找到支撑相关优化算法的资料。
 
-`gc`这个研究走进死胡同了，这个时候，我把眼光转向了`GCC`，文章最开始说了，我用 [GCC](https://godbolt.org/z/foME4ahYh) 和 [LLVM](https://godbolt.org/z/PdYz6zo9v) 测试相关代码的时候，有一样的优化效果。而且`GCC`的优化参数，比`Go`编译器丰富很多（`Go`编译器相关的只有一个`-N`参数，`GCC`可以自己指定各种[优化算法](https://gcc.gnu.org/onlinedocs/gcc/Optimize-Options.html)）。
+`gc`这个研究走进死胡同了，这个时候，我把眼光转向了`GCC`，文章最开始说了，我用 [GCC](https://godbolt.org/z/ETrdf8d77) 和 [LLVM](https://godbolt.org/z/Ea758P863) 测试相关代码的时候，有一样的优化效果。而且`GCC`的优化参数，比`Go`编译器丰富很多（`Go`编译器相关的只有一个`-N`参数，`GCC`可以自己指定各种[优化算法](https://gcc.gnu.org/onlinedocs/gcc/Optimize-Options.html)）。
 
 
 ### 4.1 GCC 优化分析
@@ -608,22 +608,18 @@ updated: 2023-12-18 12:13:14
 	}
 	
 	void thread_test1( void *ptr) {
-	    printf("thread_test1 start\n");
 	    while (1) {
 	        counter++;
 	    }
 	}
 
 
-我们先不加优化标记（或者用`-O0`）看下 [生成的编译代码](https://godbolt.org/z/W383ocKGe) 如下：
+我们先不加优化标记（或者用`-O0`）看下 [生成的编译代码](https://godbolt.org/z/6cb9e1TE3) 如下：
 
 	thread_test1:
 	        pushq   %rbp
 	        movq    %rsp, %rbp
-	        subq    $16, %rsp
 	        movq    %rdi, -8(%rbp)
-	        movl    $.LC2, %edi
-	        call    puts
 	.L7:
 	        movl    counter(%rip), %eax // 读取内存中的值给 eax 寄存器
 	        addl    $1, %eax // eax 寄存器的值 +1
@@ -631,7 +627,7 @@ updated: 2023-12-18 12:13:14
 	        jmp     .L7  // 跳转到 .L7
 
 
-我们看到，在不指定优化级别的情况下，`GCC`是不会优化`for`循环中的代码的。 如果加上了`-O1`优化级别的话，`for`循环直接变成一个无限循环的`jmp`指令，`thread_test1`[汇编代码](https://godbolt.org/z/foME4ahYh) 会变成如下：
+我们看到，在不指定优化级别的情况下，`GCC`是不会优化`for`循环中的代码的。 如果加上了`-O1`优化级别的话，`for`循环直接变成一个无限循环的`jmp`指令，`thread_test1`[汇编代码](https://godbolt.org/z/ETrdf8d77) 会变成如下：
 
 	thread_test1:
 	        subq    $8, %rsp
@@ -641,26 +637,21 @@ updated: 2023-12-18 12:13:14
 	        jmp     .L2
 
 
-加个`flag`控制变量测试再测试一下，[代码如下](https://godbolt.org/z/8P3Ea8rhv)：
+加个`flag`控制变量测试再测试一下，[代码如下](https://godbolt.org/z/Mc3zo1YKM)：
 
 	int flag = 1;
 	void thread_test1( void *ptr) {
-	    printf("thread_test1 start\n");
 	    while (flag) {
 	        counter++;
 	    }
 	}
 	
 	thread_test1:
-        subq    $8, %rsp
-        movl    $.LC0, %edi
-        call    puts
         cmpl    $0, flag(%rip) // 判断 flag == 0
         je      .L1  // 等于0跳转到.L1
 	.L3: 
         jmp     .L3 // 不等于 0 .L3 无限循环 
     .L1:  // 函数返回
-        addq    $8, %rsp
         ret
 
 
@@ -668,7 +659,7 @@ updated: 2023-12-18 12:13:14
 我们看到`GCC`还是比`Go Compiler`聪明一点，知道`flag`变量一直`1`，所以只执行了一次比较（`cmpl`）然后依然是一个`jmp`的死循环。
 
 
-我们把`flag` 换成`counter`再试下，[新生成的代码如下](https://godbolt.org/z/WhYxhPYr9)：
+我们把`flag` 换成`counter`再试下，[新生成的代码如下](https://godbolt.org/z/ah1Wb7KE6)：
 	
 	void thread_test1( void *ptr) {
 	    while (counter) {
@@ -677,9 +668,6 @@ updated: 2023-12-18 12:13:14
 	}
 	
 	thread_test1:
-	        subq    $8, %rsp
-	        movl    $.LC0, %edi
-	        call    puts
 	        movl    counter(%rip), %eax // 读取 counter 内存值给 eax
 	        testl   %eax, %eax // 判断 eax 是否为 0
 	        je      .L1 // eax = 0 跳转到 .L1 函数结束
@@ -688,7 +676,6 @@ updated: 2023-12-18 12:13:14
 	        jne     .L3 // eax 不等于 0，就跳转到 .L3，一直到 EAX 溢出，才跳出循环
 	        movl    $0, counter(%rip) // 设置 counter = 0
 	.L1:
-	        addq    $8, %rsp
 	        ret
 	// eax 是 32 位寄存器，CPU 主频按 2GHZ 算，每个时钟信号周期为0.5纳秒
 	// 不考虑流水线和指令拆分，eax 寄存器溢出只要 4294967296*2*0.5ns= 4.2s
