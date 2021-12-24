@@ -315,6 +315,9 @@ updated: 2023-12-18 12:13:14
 
 	GOSSAFUNC=main.thread1+ go build -gcflags="-N -l" ./demo.go
 
+![image.png](https://upload-images.jianshu.io/upload_images/12321605-23c3deacc0136f9b.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+
 
 ## 三、Go编译器For循环优化分析
 
@@ -737,6 +740,9 @@ updated: 2023-12-18 12:13:14
 	        jmp     .L2
 
 编译器进一步优化的时候比如做`窺孔优化`的时候，发现循环中做`eax+1`操作是没有意义的（因为没有读取`eax`的地方），所以最终就只优化成一条` jmp .L2`指令了。
+
+`C/C++`语言中有个`volatile`关键字，它的作用之一就是禁止编译器使用寄存器优化变量存储。
+
 
 
 
