@@ -100,32 +100,28 @@ updated: 2022.11.09 11:50:20
 
 #### 2.1.1 线程可见性问题
 
-我们先看一下这个线程可见性的测试`DEMO`
+我们先看一下这个线程可见性的测试`DEMO`（这里其实不是线程可见性的问题。是编译器优化的问题。更多可以看[Golang编译器优化哪些事](https://fanlv.wiki/2021/12/18/golang-complier-optimize/) 这边文章）
 	
-    public class Main {
-        void m() {
-            System.out.println("m num start\n");
-            long count = 1;
-            while (running) {
-                count++;
-            }
-            System.out.println("m num end\n");
-        }
+	func main() {
+		running := true
+		go func() {
+			println("start thread1")
+			count := 1
+			for running {
+				count++
+			}
+			println("end thread1: count =", count) // 这句代码永远执行不到为什么？
+		}()
+		go func() {
+			println("start thread2")
+			for {
+				running = false
+			}
+		}()
+		time.Sleep(time.Hour)
+	}
+	
 
-        /* volatile */ boolean running = true;
-
-        public static void main(String[] args) {
-            Main test = new Main();
-            new Thread(test::m, "t1").start();
-
-            try {
-                TimeUnit.SECONDS.sleep(1);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-            test.running = false;
-        }
-    }
 
 为什么在一个线程修改了共享变量，另外一个线程感知不到呢？这里我们需要了解下CPU的Cache结构。
 
