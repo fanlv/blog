@@ -1,5 +1,5 @@
 ---
-title: 后续遍历二叉树的几种思路
+title: 遍历二叉树的几种思路
 tags:
   - Arithmetic
   - Sort
