@@ -20,7 +20,9 @@ cover: 1
 <br/>
 
 `Linux`将虚拟地址空间划分为：`0~3G`为用户空间，`3~4G`为内核空间
-<img alt="cover" src="/./images/conver1.jpg">
+
+<img alt="cover" src="https://upload-images.jianshu.io/upload_images/12321605-cb891da74fe7ebaa.jpg?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240">
+
 <!-- ![Linux-Memory-X86-32](https://upload-images.jianshu.io/upload_images/12321605-b62889a2b3c2eb38.jpg?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240) -->
 
 

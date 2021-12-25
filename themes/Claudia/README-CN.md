@@ -56,7 +56,7 @@ npm install hexo-renderer-mathjax --save
 ``` yaml
 user:
   name: 
-  avatar: /images/avatar.jpg
+  avatar: https://upload-images.jianshu.io/upload_images/12321605-8743f44f528a9c79.jpg?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240
   location:
   description:
   footnotes:

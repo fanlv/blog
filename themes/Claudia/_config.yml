@@ -21,7 +21,7 @@ social:
 
 user:
   name: Ryo
-  avatar: /images/avatar.jpg
+  avatar: https://upload-images.jianshu.io/upload_images/12321605-8743f44f528a9c79.jpg?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240
   location: China
   description: 诗和远方
   footnotes: 自我接纳、他者信赖、他者贡献
@@ -60,4 +60,4 @@ ga_domain:
 ba_track_id: 2c076421eb9f21a0a143f8ee9c4ab171
 
 # picture of about page
-about_pic: /images/about.jpg
+about_pic: https://upload-images.jianshu.io/upload_images/12321605-b7625e3ab18e6cb5.jpg?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240
