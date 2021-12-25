@@ -9,7 +9,7 @@ date: 2021-11-28 01:00:00
 updated: 2021-11-28 01:01:00
 ---
 
-<img alt="cover" src="https://upload-images.jianshu.io/upload_images/12321605-fec8dda1445e78ec.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240">
+<img alt="cover" src="https://upload-images.jianshu.io/upload_images/12321605-5a4f15ef8cd7c7b4.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240">
 
 
 ## 一、背景
