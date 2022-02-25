@@ -45,7 +45,7 @@ updated: 2023.10.09 12:50:20
 7. `i18n`的`User`服务发现当前请求是`Cross`过来的，不会再去请求`Global Meta`，会直接走本地的查询逻辑，查出`User`的数据返回给`EdgeProxy`
 8. `EdgeProxy`拿到`Response`以后，会走原路返回给客户端。
 
-![image.png](https://upload-images.jianshu.io/upload_images/12321605-6a3bcb4c53567e83.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+![image.png](https://upload-images.jianshu.io/upload_images/12321605-b94e52b2371bb8db.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 
 
 ## 三、数据定位
