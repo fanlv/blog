@@ -1088,7 +1088,7 @@ updated: 2023.10.09 11:50:20
 	}
 	
 	func main() {	
-		println("demo3: ",demo3())
+  		println("demo1: ",demo1())
 	}
 	
 	func demo1() {

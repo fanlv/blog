@@ -49,9 +49,9 @@ updated: 2023.09.09 11:50:20
 
 上面死锁日志重点如下： 
 
-* 事务一，WAITING FOR THIS LOCK TO BE GRANTED:  lock_mode X locks gap before rec insert intention waiting
-* 事务二， HOLDS THE LOCK(S): lock mode S locks gap before rec 
-* 事务二，WAITING FOR THIS LOCK TO BE GRANTED: lock_mode X locks gap before rec insert intention waiting
+* 事务一，`WAITING FOR THIS LOCK TO BE GRANTED:  lock_mode X locks gap before rec insert intention waiting`
+* 事务二， `HOLDS THE LOCK(S): lock mode S locks gap before rec `
+* 事务二，`WAITING FOR THIS LOCK TO BE GRANTED: lock_mode X locks gap before rec insert intention waiting`
 
 **因为死锁日志并没有完整的死锁现场**，光看事两个务发生的语句，我们这里很难分析出具体死锁原因，真正原因我们下面复现死锁场景的时候再说。
 
@@ -67,22 +67,22 @@ updated: 2023.09.09 11:50:20
 
 在此之前，我们能要先了解下日志里面各种锁对应的相关描述：
 
-* 记录锁（`LOCK_REC_NOT_GAP`）: locks rec but not gap
-* 间隙锁（`LOCK_GAP`）: locks gap before rec
-* Next-key 锁（`LOCK_ORNIDARY`）: lock_mode X
-* 插入意向锁（`LOCK_INSERT_INTENTION`）: locks gap before rec insert intention
+* 记录锁（`LOCK_REC_NOT_GAP`）: `locks rec but not gap`
+* 间隙锁（`LOCK_GAP`）: `locks gap before rec`
+* Next-key 锁（`LOCK_ORNIDARY`）: `lock_mode X`
+* 插入意向锁（`LOCK_INSERT_INTENTION`）: `locks gap before rec insert intention`
 
 这里有一点要注意的是，并不是在日志里看到 `lock_mode X` 就认为这是 `Next-key` 锁，因为还有一个例外：如果在 `supremum record` 上加锁，`locks gap before rec` 会省略掉，间隙锁会显示成 `lock_mode X`，插入意向锁会显示成 `lock_mode X insert intention`。
 
 
 #### 1. READ COMMITTED 下是否有间隙锁(Gap Lock)?
 
-因为上面死锁日志里面有 `lock mode S locks gap before rec`，我们 Mysql 隔离级别都是RC，大家都说RC隔离级别下Gap Lock会失效，那RC下面到底有没有`Gap Lock`。
+因为上面死锁日志里面有 `lock mode S locks gap before rec`，我们`MySQL`隔离级别都是`RC`，大家都说`RC`隔离级别下`Gap Lock`会失效，那`RC`下面到底有没有`Gap Lock`。
 
-其实答案很明显，我们可以根据结果来推导，死锁日志里面报了插入意向锁的死锁，我们知道插入意向锁只跟间隙锁冲突，说明RC下面肯定是存在Gap锁的，不然插入意向锁也不会造成死锁。
+其实答案很明显，我们可以根据结果来推导，死锁日志里面报了插入意向锁的死锁，我们知道插入意向锁只跟间隙锁冲突，说明`RC`下面肯定是存在`Gap`锁的，不然插入意向锁也不会造成死锁。
 
 
-口说无凭，撸下Mysql官方文档，关于 [Gap Lock](https://dev.mysql.com/doc/refman/5.7/en/innodb-locking.html) 描述如下。
+口说无凭，撸下`MySQL`官方文档，关于 [Gap Lock](https://dev.mysql.com/doc/refman/5.7/en/innodb-locking.html) 描述如下。
 
 > Gap locking can be disabled explicitly. This occurs if you change the transaction isolation level to READ COMMITTED or enable the innodb_locks_unsafe_for_binlog system variable (which is now deprecated). Under these circumstances, gap locking is disabled for searches and index scans and is used only for foreign-key constraint checking and duplicate-key checking.
 
@@ -90,9 +90,9 @@ updated: 2023.09.09 11:50:20
 
 **所以结论是，RC隔离级别下，某些场景还是会有Gap Lock。**
 
-#### 2. Insert 的时候 Mysql 到底会加哪些锁？
+#### 2. Insert 的时候 MySQL 到底会加哪些锁？
 
-继续撸下 Mysql 官方文档，关于 [insert锁有如下描述](https://dev.mysql.com/doc/refman/5.7/en/innodb-locks-set.html)
+继续撸下 `MySQL` 官方文档，关于 [insert锁有如下描述](https://dev.mysql.com/doc/refman/5.7/en/innodb-locks-set.html)
 
 > INSERT sets an exclusive lock on the inserted row. This lock is an index-record lock, not a next-key lock (that is, there is no gap lock) and does not prevent other sessions from inserting into the gap before the inserted row.
 > 
@@ -102,16 +102,16 @@ updated: 2023.09.09 11:50:20
 
 具体翻译如下：
 
-1. insert会对插入成功的行加上排它锁，这个排它锁是个记录锁，而非next-key锁（当然更不是gap锁了），不会阻止其他并发的事务往这条记录之前插入记录。
+1. `insert`会对插入成功的行加上排它锁，这个排它锁是个记录锁，而非`next-key`锁（当然更不是`gap`锁了），不会阻止其他并发的事务往这条记录之前插入记录。
 
-2. 在插入之前，会先在插入记录所在的间隙加上一个插入意向锁（Insert intenion Lock），并发的事务可以对同一个Gap加插入意向锁。插入意向锁和插入意向锁不会互相阻塞。
+2. 在插入之前，会先在插入记录所在的间隙加上一个插入意向锁（`Insert intenion Lock`），并发的事务可以对同一个`Gap`加插入意向锁。插入意向锁和插入意向锁不会互相阻塞。
 
-3. 如果insert 的事务出现了duplicate-key error ，事务会对duplicate index record加共享锁。这个共享锁在并发的情况下是会产生死锁的，比如有两个并发的insert都对要对同一条记录加共享锁，而此时这条记录又被其他事务加上了排它锁，**排它锁的事务者回滚后，两个并发的insert操作是会发生死锁的**。  
+3. 如果`insert`的事务出现了`duplicate-key error` ，事务会对`duplicate index record`加共享锁。这个共享锁在并发的情况下是会产生死锁的，比如有两个并发的`insert`都对要对同一条记录加共享锁，而此时这条记录又被其他事务加上了排它锁，**排它锁的事务者回滚后，两个并发的insert操作是会发生死锁的**。  
 
 这个只是官方文档说明的。实际上：
 
-1. 执行 insert 之后，如果没有任何冲突，在 show engine innodb status 命令中是看不到任何锁的，这是因为 insert 加的是隐式锁。什么是隐式锁？隐式锁的意思就是没有锁。
-2. InnoDB 在插入记录时，是不加锁的。如果事务 A 插入记录且未提交，这时事务 B 尝试对这条记录加锁，事务 B 会先去判断记录上保存的事务 id 是否活跃，如果活跃的话，那么就帮助事务 A 去建立一个锁对象，然后自身进入等待事务 A 状态，这就是所谓的隐式锁转换为显式锁。
+1. 执行 `insert` 之后，如果没有任何冲突，在 `show engine innodb status` 命令中是看不到任何锁的，这是因为`insert`加的是隐式锁。什么是隐式锁？隐式锁的意思就是没有锁。
+2. `InnoDB`在插入记录时，是不加锁的。如果事务`A`插入记录且未提交，这时事务`B`尝试对这条记录加锁，事务`B`会先去判断记录上保存的事务`id`是否活跃，如果活跃的话，那么就帮助事务`A`去建立一个锁对象，然后自身进入等待事务`A`状态，这就是所谓的隐式锁转换为显式锁。
 
 具体可以参考[读 MySQL 源码再看 INSERT 加锁流程
 ](https://www.aneasystone.com/archives/2018/06/insert-locks-via-mysql-source-code.html)
@@ -170,12 +170,12 @@ updated: 2023.09.09 11:50:20
 
 
 
-**时间线2**，Session 1 插入成功，查询下 mysql 锁状态，发现当前没有阻塞的锁。
+**时间线2**，`Session1` 插入成功，查询下`MySQL`锁状态，发现当前没有阻塞的锁。
 	
 	mysql> select * from information_schema.innodb_locks;
 	Empty set (0.05 sec)
 
-**时间线3**，Session 2 插入语句会被 block，查询锁状态发现，Session1 持有了 X 锁 (事务还没提交所以一直持有)，Session2 请求持有 S 锁，但是被 Session1 的持有的 X 锁 block住了。
+**时间线3**，`Session2` 插入语句会被 `block`，查询锁状态发现，`Session1` 持有了`X`锁 (事务还没提交所以一直持有)，`Session2`请求持有`S`锁，但是被`Session1`的持有的`X`锁`block`住了。
 
 	mysql> select * from information_schema.innodb_locks;
 	+----------------+-------------+-----------+-----------+----------------------------+------------+------------+-----------+----------+-----------+
@@ -187,7 +187,7 @@ updated: 2023.09.09 11:50:20
 	2 rows in set (0.19 sec)
 
 
-**时间线4**， Session 3 插入语句阻塞，Session3 跟 Session2 一样，都是请求 S 锁，被 Session1 的持有的 X 锁 block住了。
+**时间线4**， `Session3` 插入语句阻塞，`Session3` 跟 `Session2`一样，都是请求`S`锁，被 `Session1`的持有的`X`锁`block`住了。
 
 	mysql> select * from information_schema.innodb_locks;
 	+----------------+-------------+-----------+-----------+----------------------------+------------+------------+-----------+----------+-----------+
@@ -200,7 +200,7 @@ updated: 2023.09.09 11:50:20
 	3 rows in set (0.10 sec)
 
 
-**时间线5**，Session 1 回滚以后，Session2 和 Session3 都成功拿到了 S 锁，可以`show engine innodb status`，看下死锁日志如下
+**时间线5**，`Session1` 回滚以后，`Session2` 和 `Session3` 都成功拿到了`S`锁，可以`show engine innodb status`，看下死锁日志如下
 	
 	------------------------
 	LATEST DETECTED DEADLOCK
@@ -239,15 +239,15 @@ updated: 2023.09.09 11:50:20
 	
 从日志我们可以看出：
 
-1. 事务167515（Session2）`lock_mode X insert intention waiting Record lock`插入意向排他锁在等待记录锁。
-2. 事务167516 （Session3）`lock mode S Record lock` 持有 S 记录锁。
-3. 事务167516 （Session3）`lock_mode X insert intention waiting Record lock` 插入意向排他锁等待记录锁。
-4. `WE ROLL BACK TRANSACTION (2)` , 最终 mysql roll back 了 Session3 , 执行了Session2.
+1. 事务167515（`Session2`）`lock_mode X insert intention waiting Record lock`插入意向排他锁在等待记录锁。
+2. 事务167516 （`Session3`）`lock mode S Record lock` 持有 S 记录锁。
+3. 事务167516 （`Session3`）`lock_mode X insert intention waiting Record lock` 插入意向排他锁等待记录锁。
+4. `WE ROLL BACK TRANSACTION (2)` , 最终 `MySQL roll back`了`Session3` , 执行了`Session2`.
 
 
 #### 场景一死锁总结 
 
-**死锁日志的信息记录并不全**，其实在**时间线4**的时候，我们可以看到 Session2 和 Session3 在申请 S 记录锁。Session1 回滚了以后，Session2 和 Session3 都持有 S 锁，然后都请求 X 锁，互相等待对方释放 S 锁，所以导致死锁。
+**死锁日志的信息记录并不全**，其实在**时间线4**的时候，我们可以看到`Session2`和`Session3`在申请 `S`记录锁。Session1 回滚了以后，`Session2`和`Session3`都持有`S`锁，然后都请求`X`锁，互相等待对方释放`S`锁，所以导致死锁。
 
 具体流程图类似下图
 
@@ -278,8 +278,8 @@ updated: 2023.09.09 11:50:20
 	mysql> select * from information_schema.innodb_locks;
 	Empty set (0.10 sec)
 
-**[时间线5](./5.txt)** Session1.2 执行 Insert被阻塞，查询锁的情况，可以看到Session1.1 对有 10 有 X 锁。
-Session1.2 等待 S 锁。
+**[时间线5](./5.txt)** `Session1.2`执行`Insert`被阻塞，查询锁的情况，可以看到`Session1.1` 对有`10`有`X`锁。
+`Session1.2`等待`S`锁。
 
 
 	mysql> select * from information_schema.innodb_locks;
@@ -292,7 +292,7 @@ Session1.2 等待 S 锁。
 	2 rows in set (0.09 sec)
 
 
-**[时间线6](./6.txt)** 跟上面一样，Session2.1 对有 20 有 X 锁，Session2.2 等待 S 锁。
+**[时间线6](./6.txt)** 跟上面一样，`Session2.1` 对有`20`有`X`锁，`Session2.2`等待`S`锁。
 
 
 	mysql> select * from information_schema.innodb_locks;
@@ -307,7 +307,7 @@ Session1.2 等待 S 锁。
 	4 rows in set (0.12 sec)
 
 
-**[时间线7](./7.txt)** 跟上面一样，Session3.1 对有 30 有 X 锁，Session3.2 等待 S 锁。 
+**[时间线7](./7.txt)** 跟上面一样，`Session3.1`对有`30`有`X`锁，`Session3.2`等待`S`锁。 
 
 	mysql> select * from information_schema.innodb_locks;
 	+----------------+-------------+-----------+-----------+----------------------------+------------+------------+-----------+----------+-----------+
@@ -323,7 +323,7 @@ Session1.2 等待 S 锁。
 	6 rows in set (0.13 sec)
 
 
-**[时间线8](./8.txt)** 这里我们 Rollback 了 Session1.1 的操作，这个时候 Session1.2 不在阻塞，数据正常插入。
+**[时间线8](./8.txt)** 这里我们`Rollback`了`Session1.1`的操作，这个时候`Session1.2`不在阻塞，数据正常插入。
 
 	mysql> select * from information_schema.innodb_locks;
 	+----------------+-------------+-----------+-----------+----------------------------+------------+------------+-----------+----------+-----------+
@@ -336,7 +336,7 @@ Session1.2 等待 S 锁。
 	+----------------+-------------+-----------+-----------+----------------------------+------------+------------+-----------+----------+-----------+
 	4 rows in set (0.10 sec)
 
-因为Session1.1 (167559)会滚了，只看`innodb_locks`表，  看不到 Session1.2(167566) 的锁状态了，我们`show engine innodb status`看下 Session1.2(167566) 的状态，显示 Session1.2(167566) 这个时候持有了数据`20`共享`Record Lock`和`(10，20)`的 `Gap Lock`。我测试了下，尝试再开个事务尝试插入（11，19）数据，都被阻塞了，证明这就是`Gap Lock`。
+因为`Session1.1` (`167559`)会滚了，只看`innodb_locks`表，  看不到 `Session1.2`(`167566`) 的锁状态了，我们`show engine innodb status`看下 `Session1.2`(`167566`) 的状态，显示 `Session1.2`(`167566`) 这个时候持有了数据`20`共享`Record Lock`和`(10，20)`的 `Gap Lock`。我测试了下，尝试再开个事务尝试插入（`11，19`）数据，都被阻塞了，证明这就是`Gap Lock`。
 
 	---TRANSACTION 167566, ACTIVE 217 sec
 	3 lock struct(s), heap size 360, 2 row lock(s), undo log entries 1
@@ -347,7 +347,7 @@ Session1.2 等待 S 锁。
 	Record lock, heap no 3 PHYSICAL RECORD（表示20）: n_fields 4; compact format; info bits 0
 
 
-**[时间线9](./9.txt)** 这里我们 Rollback 了 Session2.1(167560) 的操作，因为我们上面知道 Session1.2(167566) 持有了数据`20`的共享的`Gap Lock`和`Record Lock`，所以 Session2.2 的数据依然Block了。查询`innodb_lock_waits` 发现，的确 Session1.2(167566) 阻塞了 Session2.2(167567) 的操作。
+**[时间线9](./9.txt)** 这里我们 `Rollback` 了 `Session2.1`(`167560`) 的操作，因为我们上面知道 `Session1.2`(`167566`) 持有了数据`20`的共享的`Gap Lock`和`Record Lock`，所以 `Session2.2` 的数据依然`Block`了。查询`innodb_lock_waits` 发现，的确 `Session1.2`(`167566`) 阻塞了 `Session2.2`(`167567`) 的操作。
 
 	mysql> select * from information_schema.innodb_lock_waits;
 	+-------------------+-------------------+-----------------+------------------+
@@ -358,7 +358,7 @@ Session1.2 等待 S 锁。
 	+-------------------+-------------------+-----------------+------------------+
 	2 rows in set (0.14 sec)
 	
-再查下`innodb_locks`阻塞锁的状态，因为RollBack了 20 这条数据，现在 Session.1.2(167566) 和 Session2.2(167567)，发现这时候`Gap Lock`的数据都加到了30上面去了。
+再查下`innodb_locks`阻塞锁的状态，因为`RollBack`了`20`这条数据，现在`Session.1.2`(`167566`) 和 `Session2.2`(`167567`)，发现这时候`Gap Lock`的数据都加到了`30`上面去了。
 
 	mysql> select * from information_schema.innodb_locks;
 	+----------------+-------------+-----------+-----------+----------------------------+------------+------------+-----------+----------+-----------+
@@ -371,7 +371,7 @@ Session1.2 等待 S 锁。
 	+----------------+-------------+-----------+-----------+----------------------------+------------+------------+-----------+----------+-----------+
 	4 rows in set (0.10 sec)
 
-`show engine innodb status`，看下锁详细信息 Session.1.2(167566) 持有数据`10`的共享`Record Lock`和`(10,30)`的`Gap Lock`。
+`show engine innodb status`，看下锁详细信息 `Session.1.2`(`167566`) 持有数据`10`的共享`Record Lock`和`(10,30)`的`Gap Lock`。
 	
 	---TRANSACTION 167566, ACTIVE 270 sec
 	4 lock struct(s), heap size 1184, 2 row lock(s), undo log entries 1
@@ -385,7 +385,7 @@ Session1.2 等待 S 锁。
 	RECORD LOCKS space id 252 page no 3 n bits 72 index `PRIMARY` of table `test_db`.`message_entity` trx id 167566 lock mode S locks gap before rec
 	Record lock, heap no 5 PHYSICAL RECORD（表示30）: n_fields 4; compact format; info bits 0
 
-继续看下Session2.2(167567)的锁详细信息，Session2.2(167567)持有了数据`30`的的共享`Record Lock`和`Gap Lock`，等待对`(10,30)`上加上插入间隙锁。
+继续看下`Session2.2`(`167567`)的锁详细信息，`Session2.2`(`167567`)持有了数据`30`的的共享`Record Lock`和`Gap Lock`，等待对`(10,30)`上加上插入间隙锁。
 
 	
 	TABLE LOCK table `test_db`.`message_entity` trx id 167567 lock mode IX
@@ -402,7 +402,7 @@ Session1.2 等待 S 锁。
 	Record lock, heap no 5 PHYSICAL RECORD（表示30）: n_fields 4; compact format; info bits 0
 
 
-**[时间线10](./10.txt)** 执行 Session3.1(167565) Rollback，Session3.2 立即报死锁，然后回滚了。Session2.2，还在被Session1.2 阻塞了。
+**[时间线10](./10.txt)** 执行 `Session3.1`(`167565`) `Rollback`，`Session3.2` 立即报死锁，然后回滚了。`Session2.2`，还在被`Session1.2` 阻塞了。
 
 	mysql> select * from information_schema.innodb_locks;
 	+----------------+-------------+-----------+-----------+----------------------------+------------+------------+-----------+----------+-----------+
@@ -414,7 +414,7 @@ Session1.2 等待 S 锁。
 	2 rows in set (0.08 sec)
 
 
-**[时间线11](./11.txt)** 回滚了Session1.2(167566)以后，没有`（10，30）`的`Gap Lock`，Session2.2(167567)数据就能正常插入了。
+**[时间线11](./11.txt)** 回滚了`Session1.2`(`167566`)以后，没有`（10，30）`的`Gap Lock`，`Session2.2`(`167567`)数据就能正常插入了。
 
 
 #### 场景二死锁总结
@@ -432,7 +432,7 @@ Session1.2 等待 S 锁。
 
 ## 总结-本质问题
 
-一句话总结就是，假设两个事务插入的数据有duplicate冲突，如果回滚了第一个事务，第二个事务插入成功以后，mysql会给这个记录加上间隙锁（**RC下也会有间隙锁**），如果多个事务，都因为duplicate阻塞，又都有Rollback，导致多个事务对同一个区间加上间隙锁，然后又都想像这个区间插入数据，所以就会死锁（例如上面场景2）。
+一句话总结就是，假设两个事务插入的数据有`duplicate`冲突，如果回滚了第一个事务，第二个事务插入成功以后，`MySQL`会给这个记录加上间隙锁（**RC下也会有间隙锁**），如果多个事务，都因为`duplicate`阻塞，又都有`Rollback`，导致多个事务对同一个区间加上间隙锁，然后又都想像这个区间插入数据，所以就会死锁（例如上面场景2）。
 
 验证间隙锁如下：
 
@@ -448,13 +448,13 @@ Session1.2 等待 S 锁。
 ### 如何避免
 
 1. 我们知道，发生上面死锁主要有两个原因，唯一索引冲突。
-2. 两个事务同时插入一个唯一索引冲突的数据，然后第一个事务Rollback。
+2. 两个事务同时插入一个唯一索引冲突的数据，然后第一个事务`Rollback`。
 
 
 
-针对1，我们如果不指定主键id，或者放弃插入失败重试操作，能一定概率避免死锁。
+针对1，我们如果不指定主键`id`，或者放弃插入失败重试操作，能一定概率避免死锁。
 
-针对2，GORM作者金柱之前说过GORM有默认事务，会显示的为Create语句加上 begin、commit（主要是给hook功能用的，如果不需要hook可以关闭）。我们这里关闭显示事务能一定程度上降低死锁概率。
+针对2，`GORM`作者金柱之前说过`GORM`有默认事务，会显示的为`Create`语句加上 `begin`、`commit`（主要是给`hook`功能用的，如果不需要`hook`可以关闭）。我们这里关闭显示事务能一定程度上降低死锁概率。
 
 ![gorm.jpeg](https://upload-images.jianshu.io/upload_images/12321605-2e8f15b8d29eba77.jpeg?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 
