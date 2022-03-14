@@ -1,8 +1,9 @@
 ---
-title: Redis核心技术与实战
+title: 《Redis核心技术与实战》笔记
 tags:
   - Backend
   - Redis
+  - Note
 categories:
   - Redis
 date: 2021-02-10 18:32:31
