@@ -483,7 +483,7 @@ cover: 1
 
 ![Linux-Memory-X86-64.jpg](https://upload-images.jianshu.io/upload_images/12321605-2cdf1bedff166c2f.jpg?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 
-[点我查看原图](https://raw.githubusercontent.com/fanlv/fanlv.github.io/master/Content/Foundation/images/Linux-Memory-X86-64.jpg)
+[点我查看原图](https://raw.githubusercontent.com/fanlv/blog/main/backup/Content/Foundation/images/Linux-Memory-X86-64.jpg)
 
 <br/>
 
