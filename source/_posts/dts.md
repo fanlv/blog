@@ -261,17 +261,52 @@ PS：该方案适用于数据量不大场景，数据量大的场景，会导致
 ![image.png](https://upload-images.jianshu.io/upload_images/12321605-4fc574f723cc4c4e.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 
 
-### 4.5 MySQL 数据迁移时区问题
-
-因为国内和国外时区不一样，MySQL库里面时间都是字符串格式存储，所以传输过程中可能有些问题，详见 [MySQL DateTime和Timestamp时区问题](https://fanlv.wiki/2021/11/28/mysql-time/)。
-
 
 ## 五、架构总览
 
 ![image.png](https://upload-images.jianshu.io/upload_images/12321605-d61d2a70c79726c8.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 
+## 六、数据迁移中踩的坑
 
-## 六、名词解释
+### 6.1 MySQL 数据迁移时区问题
+
+因为国内和国外时区不一样，`MySQL`库里面时间都是字符串格式存储，所以传输过程中可能有些问题，详见 [MySQL DateTime和Timestamp时区问题](https://fanlv.wiki/2021/11/28/mysql-time/)。
+
+### 6.2 PK Duplicate Error 问题
+
+本质问题，是业务方写入数据的时候`ID`用的自增`ID`（或者自己`Local`方式生成的`ID`），`DTS`这边用的`ID`是一个中心发号器生成的`ID`。两个`ID`有一定的冲突概率（概率比我们想象中的要大）。
+详见 [MySQL 自增列 Duplicate Error 问题分析](https://fanlv.wiki/2022/05/25/mysql-insert-auto-incre/)。
+
+### 6.3 INSERT ... ON DUPLICATE
+
+这个问题，其实根因就是上面`6.2`的问题，业务方的生成的`ID`和`DTS`生成的`ID`冲突了。
+
+然后我们这边最早插入的时候是用`INSERT ... ON DUPLICATE`，结果由于`ID`冲突（其实是两个条毫不相干的数据，只是因为`ID`生成方式没有保持一致，导致`PK Duplicate`），然后就走了`Update`逻辑，把业务方的其他数据给写脏了（血的教训）。
+
+优化后的逻辑：
+
+![image.png](https://upload-images.jianshu.io/upload_images/12321605-981cff5c230fd95c.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+### 6.4 唯一索引列有 Null 值
+
+我们正常打标流程，是记录数据的唯一索引，但是业务方有些表的唯一索引的列可能为空，这样就退化为普通索引，导致我们数据迁移的时候会有放大读和放大写。
+
+假设表数据如下，`(a,b)`是唯一索引
+
+ id | a | b | c 
+ ------------- | ------------- | ------------- | -------------
+ 1  | 1 | NULL | -------------
+ 2  | 1 | NULL | -------------
+ 3  | 1 | NULL | -------------
+ 4  | 1 | NULL | -------------
+ 5  | 1 | NULL | -------------
+
+我们这边对这`5`条数据，`DTS`会打`5`个标，打标的数据如下`table=xx， idx_data = 1,NULL`, 这样我们用`5`条打标数据会查出`25`条数据（因为一个打标数据可以查出`5`条）。发送到对端以后，对端会直接写入`25`条数据，这个数据重复很多的时候，会导致放大的很厉害，对`DB`读写性能有一定影响。
+
+优化方式，我们迁移过程中会用`table+idx_data`做个去重。保证相同的打标数据只会查出一次。
+ 
+
+## 七、名词解释
 
 * `Unit`：一个功能自封闭的部署单元，可以为用户提供完整的产品功能。`Unit`之间的数据存储是隔离的。一个`Unit`可以包含多个`IDC`。在本文上下文中可以假设有`CN`和`i18n`（国际化）两个`Unit`。
 * `Tenant`：租户，可以认为一个公司就是一个租户。

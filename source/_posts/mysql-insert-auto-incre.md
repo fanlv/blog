@@ -1,5 +1,5 @@
 ---
-title: MySQL Insert 源码分析
+title: MySQL 自增列 Duplicate Error 问题分析
 tags:
   - Backend
   - Golang
@@ -9,9 +9,9 @@ date: 2022-05-25 00:12:56
 updated: 2022-05-25 00:12:56
 ---
 
-#一、背景
+# 一、背景
 
-最近我们在做线上的数据迁移测试（可以理解就是把`A`数据中心的数据迁移到`B`数据中心，`A`和`B`数据中心的`MySQL`是同构的，迁移过程中，`A`、`B`的`MySQL`都有正常的业务数据写入，具体背景可以看 [数据传输系统落地和思考](https://fanlv.wiki/2022/02/26/dts/) 这篇文章）。部分表的数据每次我们触发迁移的时候，业务方写入数据的时候就会有`Error 1062: Duplicate entry 'xxx' for key 'PRIMARY'`这样的错误。业务方同学还反馈他们写数据的时候并没有指定`ID`，所以他们对这样的报错比较困惑，具体他们的数据写入的伪代码如下：
+最近我们在做线上的数据迁移测试（可以理解就是把`A`数据中心的数据迁移到`B`数据中心，`A`和`B`数据中心的`MySQL`是同构的，迁移过程中，`A`、`B`的`MySQL`都有正常的业务数据写入，具体背景可以看 [数据传输系统落地和思考](https://fanlv.wiki/2022/02/26/dts/) 这篇文章）。每次我们触发迁移的时候，就有业务方反馈他们写入数据的时候就会有`Error 1062: Duplicate entry 'xxx' for key 'PRIMARY'`这样的错误。业务方同学还反馈他们写数据的时候并没有指定`ID`，所以他们对这样的报错比较困惑，具体他们的数据写入的伪代码如下：
 
 	type Data struct {
 		ID           int64     `gorm:"primaryKey;column:id"`
@@ -33,19 +33,31 @@ updated: 2022-05-25 00:12:56
 	
 再交代一下其他的背景。
 
-1. 业务上这个表的写入的`QPS`相对比较高。迁移的数据量也比较大。
-2. 我们做数据迁移的时候，从`A`数据中心迁移到`B`数据中心的时候，会抹掉`binlog`中的`ID`数据，然后用一个中心的发号器`IDGenerator`生成一个新的`ID`然后填到`binlog`中去，然后再插入这个数据。
+1. 业务上这个表的写入的`QPS`相对比较高，迁移的数据量也比较大。
+2. 我们做数据迁移的时候，从`A`数据中心迁移到`B`数据中心的时候，会抹掉`数据`中的`ID`数据，然后用一个中心的发号器`IDGenerator`生成一个新的`ID`，然后再插入这个数据。
 
-由于，每次都是在数据迁移的时候，报这个`PK Duplicate Error`的错误，基本肯定是我们做数据迁移导致的`PK`冲突。引出几个问题：
+由于，每次都是在数据迁移的时候，报这个`PK Duplicate Error`的错误，基本肯定是我们做数据迁移导致的。引出几个问题：
 
-1. 生成自增`ID`实现方式？并发生成`ID`会不会冲突？
-2. 生成自增`ID`是否会加锁，锁的释放机制是啥？
-3. 生成自增`ID`和`唯一索引冲突检查`流程是怎么样的？
-
-问了一圈身边的朋友，好像大家对这些细节都不太了解，所以决定自己撸下源码看下。
+1. `生成自增ID`实现方式？并发生成`ID`会不会冲突？
+2. `生成自增ID`加锁机制粒度，锁的释放机制是啥？
+3. `生成自增ID`和`唯一索引冲突检查`流程是怎么样的？
 
 
-# 二、AUTO_INCREMENT 基础知识
+其实已知的问题上看，基本猜想出，具体出现问题的场景如下：
+
+
+| TimeLine  | Session 1  | Session 2 |
+|:-------------: |:---------------:|:-------------:|
+|时刻1| 生成自增ID|用IDgen生成ID|
+| 时刻2       |        |唯一索引冲突检查（Pass） |
+| 时刻3  |        |            写入成功|
+| 时刻4  |    唯一索引冲突检查（报错Duplicate Error）    |            |
+
+结论我们知道，但是`MySQL`的`Insert`流程到底是如何做的，我并不清楚，问了一圈身边的朋友，好像大家对`Insert`过程这些细节都不太了解，所以决定自己简单撸下源码验证一下上面的结论。
+
+
+
+# 二、Auto-Incr 背景知识
 
 `MySQL`的[《AUTO_INCREMENT Handling in InnoDB》](https://dev.mysql.com/doc/refman/5.7/en/innodb-auto-increment-handling.html#innodb-auto-increment-lock-modes) 这篇官方文档，其实把`AUTO_INCREMENT`相关特性都介绍很清楚了，我们做个简单总结。
 
@@ -72,16 +84,16 @@ updated: 2022-05-25 00:12:56
 		
 	另一种类型的`Mixed-mode inserts`是`INSERT ... ON DUPLICATE KEY UPDATE`，其在最坏的情况下实际上是`INSERT`语句随后又跟了一个`UPDATE`，其中`AUTO_INCREMENT`列的分配值不一定会在`UPDATE`阶段使用。
 
-* `INSERT-like` `statements` ，以上所有插入语句的统称。
+* `INSERT-like` ，以上所有插入语句的统称。
 
 
 ## 2.2 AUTO_INCREMENT 锁模式
 
 
-`MySQL`可以通过设置`innodb_autoinc_lock_mode` 变量来配置`AUTO_INCREMENT`列的锁模式，分别可以设置为`0`、`1`、`2` 三种模式。[对应的源码中的三种类型如下](https://github.com/mysql/mysql-server/blob/5.7/storage/innobase/handler/ha_innodb.cc#L145)：
+`MySQL`可以通过设置`innodb_autoinc_lock_mode` 变量来配置`AUTO_INCREMENT`列的锁模式，分别可以设置为`0`、`1`、`2` 三种模式。
 
 
-### 传统模式（traditional）
+### 0：传统模式（traditional）
 
 1. 传统的锁定模式提供了与引入`innodb_autoinc_lock_mode`变量之前相同的行为。由于语义上可能存在差异，提供传统锁定模式选项是为了向后兼容、性能测试和解决“混合模式插入”问题。
 2. 在这一模式下，所有的`insert`语句(`insert like`) 都要在语句开始的时候得到一个表级的`auto_inc`锁，在语句结束的时候才释放这把锁，注意呀，这里说的是语句级而不是事务级的，一个事务可能包涵有一个或多个语句。
@@ -89,14 +101,14 @@ updated: 2022-05-25 00:12:56
 4. 由于在这种模式下`auto_inc`锁一直要保持到语句的结束，所以这个就影响到了并发的插入。
 
 
-### 连续模式（consecutive）
+### 1：连续模式（consecutive）
 
 1. 在这种模式下，对于`simple insert`语句，`MySQL`会在语句执行的初始阶段将一条语句需要的所有自增值会一次性分配出来，并且通过设置一个互斥量来保证自增序列的一致性，一旦自增值生成完毕，这个互斥量会立即释放，不需要等到语句执行结束。所以，在`consecutive`模式，多事务并发执行`simple insert`这类语句时， 相对`traditional`模式，性能会有比较大的提升。
 2. 由于一开始就为语句分配了所有需要的自增值，那么对于像`Mixed-mode insert`这类语句，就有可能多分配了一些值给它，从而导致自增序列出现`空隙`。而`traditional`模式因为每一次只会为一条记录分配自增值，所以不会有这种问题。
 3. 另外，对于Bulk inserts语句，依然会采取AUTO-INC锁。所以，如果有一条Bulk inserts语句正在执行的话，Simple inserts也必须等到该语句执行完毕才能继续执行。
 
 
-### 交错模式（interleaved）
+### 2：交错模式（interleaved）
 
 在这种模式下，对于所有的`insert-like`语句，都不会存在表级别的`AUTO-INC`锁，意味着同一张表上的多个语句并发时阻塞会大幅减少，这时的效率最高。但是会引入一个新的问题：当`binlog_format`为`statement`时，这时的复制没法保证安全，因为批量的`insert`，比如`insert ..select..`语句在这个情况下，也可以立马获取到一大批的自增`ID`值，不必锁整个表，`slave`在回放这个`SQL`时必然会产生错乱（`binlog`使用`row`格式没有这个问题）。
 
@@ -113,10 +125,9 @@ updated: 2022-05-25 00:12:56
 * 而从`MySQL 8`开始，`auto-increment counter`被存储在了`redo log`中，并且每次变化都会刷新到`redo log`中。另外，我们可以通过`ALTER TABLE … AUTO_INCREMENT = N`来主动修改`auto-increment counter`。
 
 
+### 生产环境相关配置
 
-
-
-我们线上生产环境配置是`innodb_autoinc_lock_mode = 2`，`binlog_format = ROW`
+我们生产环境配置是`innodb_autoinc_lock_mode = 2`，`binlog_format = ROW`
 
 	mysql> show variables like 'innodb_autoinc_lock_mode';
 	+--------------------------+-------+
@@ -141,7 +152,7 @@ updated: 2022-05-25 00:12:56
 
 [`mysql_parse`](https://github.com/mysql/mysql-server/blob/5.7/sql/sql_parse.cc#L5438) -> [`mysql_execute_command`](https://github.com/mysql/mysql-server/blob/5.7/sql/sql_parse.cc#L2456) -> [`Sql_cmd_insert::execute`](https://github.com/mysql/mysql-server/blob/5.7/sql/sql_insert.cc#L3176) -> [`Sql_cmd_insert::mysql_insert`](https://github.com/mysql/mysql-server/blob/5.7/sql/sql_insert.cc#L428) -> [`write_record`](https://github.com/mysql/mysql-server/blob/5.7/sql/sql_insert.cc#L1512) -> [`handler::ha_write_row`](https://github.com/mysql/mysql-server/blob/5.7/sql/handler.cc#L8153) -> [`ha_innobase::write_row`](https://github.com/mysql/mysql-server/blob/5.7/storage/innobase/handler/ha_innodb.cc#L7506)
 
-这里我们主要关注`innodb`层的数据写入函数[`ha_innobase::write_row`](https://github.com/mysql/mysql-server/blob/5.7/storage/innobase/handler/ha_innodb.cc#L7506) 相关的代码就好了，自增`ID`的生成和`唯一索引冲突检查`都是在这个函数里面完成的。
+这里我们主要关注`innodb`层的数据写入函数[`ha_innobase::write_row`](https://github.com/mysql/mysql-server/blob/5.7/storage/innobase/handler/ha_innodb.cc#L7506) 相关的代码就好了，`生成自增ID`和`唯一索引冲突检查`都是在这个函数里面完成的。
 
 ## 3.2 innodb 数据插入流程
 
@@ -155,7 +166,7 @@ updated: 2022-05-25 00:12:56
 	6. Handling of errors related to auto-increment. 
 	7. Cleanup and exit. 
 
-我们主要关注，自增列相关的`步骤三`和`步骤六`，数据写入的`步骤六`。
+我们主要关注，自增列相关的`步骤三`和`步骤六`，数据写入的`步骤五`。
 
 ### 自增ID的相关处理过程
 
@@ -166,8 +177,8 @@ updated: 2022-05-25 00:12:56
             ->ha_innobase::get_auto_increment // 获取 dict_tabel中的当前 auto increment 值，并根据全局参数更新下一个 auto increment 的值到数据字典中
                 ->ha_innobase::innobase_get_autoinc // 读取 autoinc 值
                     ->ha_innobase::innobase_lock_autoinc
-                       -> dict_table_autoinc_lock(m_prebuilt->table); // lock_mode = 2 的时候
-                    -> dict_table_autoinc_unlock(m_prebuilt->table); // 解锁
+                       ->dict_table_autoinc_lock(m_prebuilt->table); // lock_mode = 2 的时候
+                    ->dict_table_autoinc_unlock(m_prebuilt->table); // 解锁
             ->set_next_insert_id // 多行插入的时候设置下一个插入的id值
 
 
@@ -198,7 +209,7 @@ updated: 2022-05-25 00:12:56
 		}
 	
 		switch (lock_mode) {
-		case AUTOINC_NO_LOCKING:
+		case AUTOINC_NO_LOCKING: // lock_mode = 2
 			/* Acquire only the AUTOINC mutex. */
 			dict_table_autoinc_lock(m_prebuilt->table);
 			break;
@@ -278,6 +289,58 @@ updated: 2022-05-25 00:12:56
 						}
 					}
 				}
+
+
+### 唯一索引冲突检查过程
+	
+	  |-Sql_cmd_insert_values::execute_inner() // Insert one or more rows from a VALUES list into a table
+	    |-write_record
+	      |-handler::ha_write_row() // 调用存储引擎的接口
+	        |-ha_innobase::write_row()
+	          |-row_insert_for_mysql
+	            |-row_insert_for_mysql_using_ins_graph
+	              |-trx_start_if_not_started_xa
+	                |-trx_start_low // 激活事务，事务状态由 not_active 变为 active
+	              |-row_get_prebuilt_insert_row // Gets pointer to a prebuilt dtuple used in insertions
+	              |-row_mysql_convert_row_to_innobase // 记录格式从MySQL转换成InnoDB, 不同数据类型处理方式不同，比如整形server端是小端存储，innodb是大端存储
+	              |-row_ins_step
+	                |-trx_write_trx_id(node->trx_id_buf, trx->id)
+	                |-lock_table // 给表加IX锁
+	                |-row_ins // 插入记录
+	                  |-while (node->index != NULL)
+	                    |-row_ins_index_entry_step // 向索引中插入记录,把 innobase format field 的值赋给对应的index entry field
+	                      |-row_ins_index_entry_set_vals // 根据该索引以及原记录，将组成索引的列的值组成一个记录
+	                      |-dtuple_check_typed // 检查组成的记录的有效性
+	                      |-row_ins_index_entry // 插入索引项
+	                        |-row_ins_clust_index_entry // 插入聚集索引
+	                          |-row_ins_clust_index_entry_low // 先尝试乐观插入，修改叶子节点 BTR_MODIFY_LEAF
+	                            |-mtr_t::mtr_t()
+	                            |-mtr_t::start()
+	                            |-btr_pcur_t::open()
+	                              |-btr_cur_search_to_nth_level // 将cursor移动到索引上待插入的位置
+	                                |-buf_page_get_gen //取得本层页面，首次为根页面
+	                                |-page_cur_search_with_match_bytes // 在本层页面进行游标定位
+	                            |-row_ins_duplicate_error_in_clust // 判断插入项是否存在唯一键冲突
+	                              |-row_ins_set_shared_rec_lock // 对cursor 对应的已有记录加S锁（可能会等待）保证记录上的操作，包括：Insert/Update/Delete 已经提交或者回滚
+	                                |-lock_clust_rec_read_check_and_lock // 判断cursor对应的记录上是否存在隐式锁, 若存在，则将隐式锁转化为显示锁
+	                                  |-lock_rec_convert_impl_to_expl // 隐式锁转换
+	                                  |-lock_rec_lock //如果上面的隐式锁转化成功，此处加S锁将会等待，直到活跃事务释放锁。
+	                              |-row_ins_dupl_err_with_rec // S锁加锁完成之后，可以再次做判断，最终决定是否存在唯一键冲突, 
+	                                // 1. 判断insert记录与cursor对应的记录取值是否相同, 
+	                                // 2. 二级唯一键值锁引，可以存在多个 NULL 值, 
+	                                // 3. 最后判断记录的delete flag状态，判断记录是否被删除提交
+	                                |-return !rec_get_deleted_flag();
+	                            |-btr_cur_optimistic_insert // 乐观插入
+	                            |-btr_cur_pessimistic_insert // 乐观插入失败则进行悲观插入
+	                            |-mtr_t::commit() mtr_commit //Commit a mini-transaction.
+	                            |-btr_pcur_t::close()
+
+
+
+# 四、总结
+
+1. `innodb_autoinc_lock_mode=2`的时候，`MySQL`是申请到`ID`以后就会释放锁。并发生成自增`ID`不会冲突。
+2. `MySQL`是先生成`ID`，再去做插入前的`唯一索引冲突检查`。如果一部分`Client`用`MySQL`自增`ID`，一部分`Client`用自己生成的`ID`，是有可能导致自增`ID`的`Client`报`PK Duplicate Error`的。
 
 
 # 参考资料
