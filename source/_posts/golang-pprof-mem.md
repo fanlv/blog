@@ -455,7 +455,7 @@ updated: 2022-06-01 09:00:00
 
 # 总结
 
-`golang`堆内存大小不一定跟`RSS`一致，它跟`GC`、`scavenging`时机有关。
+`golang`堆内存大小不一定跟`RSS`一致，它跟`GC`、`scavenging`时机有关。如果有大量`lcoalcache`申请释放，很可能导致`RSS`远远大于`heap`使用的大小。
 
 
 
