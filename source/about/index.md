@@ -10,7 +10,4 @@ layout: about
 
 本`blog`主要用于总结平时学习的一些技术和踩过的一些坑，文章仅代表个人理解，有什么不对的地方，欢迎大家批评指正。
 
-有需要`内推字节`的朋友和喜欢做`技术交流`的朋友，可以加我微信。
-
-
-<img src="https://upload-images.jianshu.io/upload_images/12321605-6cd0673498ca4ea5.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240" alt="fanlv" width="180" height="180">
+有需要`内推字节`的朋友和喜欢做`技术交流`的朋友，可以加我微信`fanlvlgh`。
