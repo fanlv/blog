@@ -11,7 +11,7 @@ updated: 2022-06-02 09:00:00
 
 # 一、背景
 
-朋友的一个服务，某个集群内存的`RSS`使用率一直在`80%`左右，他用的是`8核16G`
+朋友的一个服务，某个集群内存的`RSS`使用率一直在`80%`左右，他用的是`8核16G`, 双机房一共`206`个实例。
 
 ![image.png](https://upload-images.jianshu.io/upload_images/12321605-5001071b9627f07b.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 
